@@ -32,15 +32,15 @@ The target architecture requires pushing Fusion 360 data to the Tooling/Workcent
 | Master Data | `mdm/v1/parts` | Returns master part records. Confirmed working. |
 | Master Data | `mdm/v1/suppliers` | Returns supplier UUIDs (e.g., MSC Industrial). |
 | Purchasing | `purchasing/v1/purchase-orders` | Returns full PO headers (e.g., tooling orders from MSC). |
+| Production | `production/v1/control/workcenters` | Discovered on Dev Portal. Replaces old 404 manufacturing endpoint. |
 
 ### ⚠️ Blocked Endpoints (Action Required)
 > [!IMPORTANT]
-> **ACTION REQUIRED**: IT (Courtney) must enable the **Manufacturing**, **Inventory**, and **Tooling** API collections for the currently active App in the Plex Developer Portal. The following endpoints returned 403/404 during testing because the subscription is inactive:
+> **ACTION REQUIRED**: IT (Courtney) must enable the **Tooling** and **Manufacturing** API collections for the currently active App in the Plex Developer Portal. Initial testing returned 403 authorization failures. The Tooling endpoint documentation remains completely hidden from the public developer portal until you authenticate with a subscribed developer account.
 
 - `tooling/v1/tools`
 - `tooling/v1/tool-assemblies`
 - `tooling/v1/tool-inventory`
-- `manufacturing/v1/work-centers`
 
 ---
 
@@ -51,7 +51,7 @@ While waiting for the Tooling APIs to be activated, data can be managed in two w
    - A scheduled script parses the network share `BROTHER SPEEDIO ALUMINUM.json` library.
    - Extracts `product-id`, `vendor`, and geometry.
    - Pushes payloads to `tooling/v1/tool-assemblies` to update the master inventory list.
-   - Pushes payload to `manufacturing/v1/work-centers` utilizing the `post-process.number` to ensure correct turret/pocket placement.
+   - Pushes payload to `production/v1/control/workcenters` utilizing the `post-process.number` to ensure correct turret/pocket placement.
 
 2. **CSV Upload System (Interim State)**
    - Without API access, engineering relies on bulk CSV uploads.

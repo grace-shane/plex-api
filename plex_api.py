@@ -1,0 +1,327 @@
+"""
+Plex Connect REST API Client
+Grace Engineering — CNC Tool Management
+========================================
+Base URL:  https://connect.plex.com/{collection}/{version}/{resource}
+Auth:      X-Plex-Connect-Api-Key header (Consumer Key from Developer Portal)
+Rate:      200 calls/minute
+"""
+
+import requests
+import json
+import csv
+import time
+import os
+from datetime import datetime
+
+# ─────────────────────────────────────────────
+# CONFIGURATION — fill these in
+# ─────────────────────────────────────────────
+API_KEY     = "YOUR_CONSUMER_KEY_HERE"       # from developers.plex.com → My Apps
+TENANT_ID   = ""                             # leave blank for default tenant (your PCN)
+BASE_URL    = "https://connect.plex.com"
+TEST_URL    = "https://test.connect.plex.com"
+USE_TEST    = False                          # flip to True to hit test environment first
+
+OUTPUT_DIR  = "/mnt/user-data/outputs"
+
+# ─────────────────────────────────────────────
+# BASE CLIENT
+# ─────────────────────────────────────────────
+class PlexClient:
+    def __init__(self, api_key, tenant_id="", use_test=False):
+        self.base = TEST_URL if use_test else BASE_URL
+        self.headers = {
+            "X-Plex-Connect-Api-Key": api_key,
+            "Content-Type": "application/json",
+            "Accept": "application/json",
+        }
+        if tenant_id:
+            self.headers["X-Plex-Connect-Tenant-Id"] = tenant_id
+
+        self._call_count = 0
+        self._window_start = time.time()
+
+    def _throttle(self):
+        """Stay under 200 calls/minute rate limit"""
+        self._call_count += 1
+        elapsed = time.time() - self._window_start
+        if elapsed < 60 and self._call_count >= 190:
+            wait = 60 - elapsed
+            print(f"  Rate limit approaching — waiting {wait:.1f}s...")
+            time.sleep(wait)
+            self._call_count = 0
+            self._window_start = time.time()
+        elif elapsed >= 60:
+            self._call_count = 1
+            self._window_start = time.time()
+
+    def get(self, collection, version, resource, params=None):
+        """GET request with auto-throttling and error handling"""
+        self._throttle()
+        url = f"{self.base}/{collection}/{version}/{resource}"
+        try:
+            r = requests.get(url, headers=self.headers, params=params, timeout=30)
+            r.raise_for_status()
+            return r.json()
+        except requests.exceptions.HTTPError as e:
+            print(f"  HTTP Error {r.status_code}: {url}")
+            print(f"  Response: {r.text[:300]}")
+            return None
+        except Exception as e:
+            print(f"  Error: {e}")
+            return None
+
+    def get_paginated(self, collection, version, resource, params=None, limit=100):
+        """GET all pages of a paginated endpoint"""
+        params = params or {}
+        params["limit"] = limit
+        params["offset"] = 0
+        results = []
+
+        while True:
+            data = self.get(collection, version, resource, params)
+            if not data:
+                break
+
+            # Handle both list and dict responses
+            if isinstance(data, list):
+                batch = data
+            elif isinstance(data, dict):
+                # Common Plex patterns: data["items"], data["rows"], or data itself
+                batch = (data.get("items") or
+                         data.get("rows") or
+                         data.get("data") or
+                         [data])
+            else:
+                break
+
+            if not batch:
+                break
+
+            results.extend(batch)
+            print(f"  Fetched {len(results)} records...")
+
+            if len(batch) < limit:
+                break  # last page
+
+            params["offset"] += limit
+
+        return results
+
+
+# ─────────────────────────────────────────────
+# ENDPOINT EXPLORER
+# Helps discover what endpoints are available
+# and what fields they return
+# ─────────────────────────────────────────────
+def explore_endpoint(client, collection, version, resource, params=None, max_records=3):
+    """
+    Fetch a small sample from an endpoint and pretty-print the structure.
+    Use this to understand field names before writing extraction code.
+    """
+    print(f"\n{'='*60}")
+    print(f"Exploring: {collection}/{version}/{resource}")
+    print(f"{'='*60}")
+
+    params = params or {}
+    params["limit"] = max_records
+
+    data = client.get(collection, version, resource, params)
+
+    if data is None:
+        print("  No response / endpoint may not exist or not be subscribed")
+        return None
+
+    print(f"  Response type: {type(data).__name__}")
+    print(f"  Content:\n{json.dumps(data, indent=2)[:2000]}")
+    return data
+
+
+# ─────────────────────────────────────────────
+# EXTRACTION FUNCTIONS
+# ─────────────────────────────────────────────
+def extract_purchase_orders(client, supplier=None, date_from=None):
+    """
+    Pull PO data — primary source for tool numbers already in system.
+    Goal: find all tool-related POs to seed Tool Assembly records.
+    """
+    print("\nExtracting Purchase Orders...")
+    params = {}
+    if supplier:
+        params["supplier"] = supplier
+    if date_from:
+        params["updatedAfter"] = f"{date_from}T00:00:00.000Z"
+
+    # Try common Plex PO endpoint patterns
+    # Actual endpoint confirmed from developer portal subscription
+    results = client.get_paginated("purchasing", "v1", "purchase-orders", params)
+
+    if results:
+        out = os.path.join(OUTPUT_DIR, "plex_purchase_orders.csv")
+        write_csv(results, out)
+        print(f"  Saved {len(results)} POs → {out}")
+    return results
+
+
+def extract_parts(client, part_type=None):
+    """
+    Pull part master records.
+    Goal: confirm part numbers for Tool BOM linkage.
+    """
+    print("\nExtracting Parts...")
+    params = {}
+    if part_type:
+        params["type"] = part_type
+
+    results = client.get_paginated("mdm", "v1", "parts", params)
+
+    if results:
+        out = os.path.join(OUTPUT_DIR, "plex_parts.csv")
+        write_csv(results, out)
+        print(f"  Saved {len(results)} parts → {out}")
+    return results
+
+
+def extract_workcenters(client):
+    """
+    Pull workcenter records.
+    Goal: confirm workcenter codes for Tool BOM Station assignments.
+    """
+    print("\nExtracting Workcenters...")
+    results = client.get_paginated("production", "v1/control", "workcenters")
+
+    if results:
+        out = os.path.join(OUTPUT_DIR, "plex_workcenters.csv")
+        write_csv(results, out)
+        print(f"  Saved {len(results)} workcenters → {out}")
+    return results
+
+
+def extract_operations(client):
+    """
+    Pull operation codes.
+    Goal: confirm operation codes for Tool BOM and routing linkage.
+    """
+    print("\nExtracting Operations...")
+    results = client.get_paginated("manufacturing", "v1", "operations")
+
+    if results:
+        out = os.path.join(OUTPUT_DIR, "plex_operations.csv")
+        write_csv(results, out)
+        print(f"  Saved {len(results)} operations → {out}")
+    return results
+
+
+# ─────────────────────────────────────────────
+# UTILITY
+# ─────────────────────────────────────────────
+def write_csv(records, filepath):
+    """Write list of dicts to CSV, auto-detecting headers"""
+    if not records:
+        print("  Nothing to write")
+        return
+    os.makedirs(os.path.dirname(filepath), exist_ok=True)
+    headers = list(records[0].keys()) if records else []
+    with open(filepath, "w", newline="", encoding="utf-8") as f:
+        writer = csv.DictWriter(f, fieldnames=headers, extrasaction="ignore")
+        writer.writeheader()
+        writer.writerows(records)
+
+
+# ─────────────────────────────────────────────
+# ENDPOINT DISCOVERY
+# Run this first to see what's available
+# ─────────────────────────────────────────────
+ENDPOINTS_TO_PROBE = [
+    # collection        version  resource
+    ("purchasing",      "v1",    "purchase-orders"),
+    ("purchasing",      "v1",    "purchase-order-lines"),
+    ("mdm",             "v1",    "parts"),
+    ("mdm",             "v1",    "employees"),
+    ("production",      "v1/control", "workcenters"),
+    ("manufacturing",   "v1",    "operations"),
+    ("manufacturing",   "v1",    "routings"),
+    ("inventory",       "v1",    "inventory"),
+    ("tooling",         "v1",    "tools"),
+    ("tooling",         "v1",    "tool-assemblies"),
+    ("tooling",         "v1",    "tool-inventory"),
+]
+
+
+def discover_all(client):
+    """
+    Probe all known endpoint patterns.
+    Shows which ones your API subscription covers.
+    Saves a discovery report.
+    """
+    print("\nDiscovering available endpoints...")
+    report = []
+
+    for collection, version, resource in ENDPOINTS_TO_PROBE:
+        url = f"{client.base}/{collection}/{version}/{resource}"
+        client._throttle()
+        try:
+            r = requests.get(
+                url,
+                headers=client.headers,
+                params={"limit": 1},
+                timeout=15
+            )
+            status = r.status_code
+            note = ""
+            if status == 200:
+                note = "✅ Available"
+            elif status == 401:
+                note = "❌ Auth error"
+            elif status == 403:
+                note = "🔒 Not subscribed"
+            elif status == 404:
+                note = "❓ Not found"
+            else:
+                note = f"⚠️  HTTP {status}"
+        except Exception as e:
+            status = 0
+            note = f"❌ Exception: {e}"
+
+        print(f"  {note:25s} {collection}/{version}/{resource}")
+        report.append({
+            "Collection": collection,
+            "Version": version,
+            "Resource": resource,
+            "Status": status,
+            "Note": note.strip(),
+        })
+        time.sleep(0.3)  # be polite
+
+    out = os.path.join(OUTPUT_DIR, "plex_api_discovery.csv")
+    write_csv(report, out)
+    print(f"\nDiscovery report saved → {out}")
+    return report
+
+
+# ─────────────────────────────────────────────
+# MAIN — edit what you want to run
+# ─────────────────────────────────────────────
+if __name__ == "__main__":
+    client = PlexClient(
+        api_key=API_KEY,
+        tenant_id=TENANT_ID,
+        use_test=USE_TEST,
+    )
+
+    print(f"Plex API Client — {'TEST' if USE_TEST else 'PRODUCTION'}")
+    print(f"Base URL: {client.base}")
+    print(f"Key: {API_KEY[:8]}{'*' * 20}")
+
+    # ── Step 1: Discover what endpoints you have access to
+    discover_all(client)
+
+    # ── Step 2: Pull data (uncomment as needed after discovery)
+    # extract_purchase_orders(client, date_from="2025-01-01")
+    # extract_parts(client)
+    # extract_workcenters(client)
+    # extract_operations(client)
+
+    # ── Step 3: Explore a specific endpoint structure
+    # explore_endpoint(client, "purchasing", "v1", "purchase-orders", max_records=2)
