@@ -17,13 +17,14 @@ from datetime import datetime
 # ─────────────────────────────────────────────
 # CONFIGURATION — fill these in
 # ─────────────────────────────────────────────
-API_KEY     = "YOUR_CONSUMER_KEY_HERE"       # from developers.plex.com → My Apps
+API_KEY     = "k3SmLW3y3mhqJiG6osixbYUmiPsHfB51"       # from developers.plex.com → My Apps
 TENANT_ID   = ""                             # leave blank for default tenant (your PCN)
 BASE_URL    = "https://connect.plex.com"
 TEST_URL    = "https://test.connect.plex.com"
 USE_TEST    = False                          # flip to True to hit test environment first
 
-OUTPUT_DIR  = "/mnt/user-data/outputs"
+OUTPUT_DIR   = "C:/projects/plex-api/outputs"
+TOOL_LIB_DIR = "Z:\\Engineering\\Tooling\\Fusion_Libraries"  # Mapped drive path containing JSON files
 
 # ─────────────────────────────────────────────
 # BASE CLIENT
@@ -302,6 +303,43 @@ def discover_all(client):
 # ─────────────────────────────────────────────
 # MAIN — edit what you want to run
 # ─────────────────────────────────────────────
+def explore_parts(client):
+    """
+    Hit the Parts endpoint raw — no params — and dump everything.
+    """
+    print(f"\n{'='*60}")
+    print("PARTS ENDPOINT — RAW RESPONSE")
+    print(f"{'='*60}")
+
+    url = f"{client.base}/mdm/v1/parts"
+    print(f"\n  GET {url}")
+    r = requests.get(url, headers=client.headers, timeout=30)
+    print(f"  Status: {r.status_code}")
+    print(f"  Content-Type: {r.headers.get('Content-Type')}")
+
+    if r.status_code != 200:
+        print(f"  Body: {r.text[:500]}")
+        return
+
+    data = r.json()
+
+    # Dump full raw response
+    raw = json.dumps(data, indent=2)
+    print(f"  Response length: {len(raw)} chars")
+    print(f"\n{raw[:5000]}")
+    if len(raw) > 5000:
+        print(f"\n  ... truncated ({len(raw)} total chars) ...")
+
+    # Save full response to file for inspection
+    out = os.path.join(OUTPUT_DIR, "plex_parts_raw.json")
+    os.makedirs(os.path.dirname(out), exist_ok=True)
+    with open(out, "w", encoding="utf-8") as f:
+        json.dump(data, f, indent=2)
+    print(f"\n  Full response saved → {out}")
+
+    return data
+
+
 if __name__ == "__main__":
     client = PlexClient(
         api_key=API_KEY,
@@ -313,14 +351,10 @@ if __name__ == "__main__":
     print(f"Base URL: {client.base}")
     print(f"Key: {API_KEY[:8]}{'*' * 20}")
 
-    # ── Step 1: Discover what endpoints you have access to
-    discover_all(client)
+    # ── Focus: Parts endpoint exploration
+    explore_parts(client)
 
-    # ── Step 2: Pull data (uncomment as needed after discovery)
-    # extract_purchase_orders(client, date_from="2025-01-01")
+    # ── Other exploration (uncomment as needed)
+    # discover_all(client)
     # extract_parts(client)
-    # extract_workcenters(client)
-    # extract_operations(client)
-
-    # ── Step 3: Explore a specific endpoint structure
-    # explore_endpoint(client, "purchasing", "v1", "purchase-orders", max_records=2)
+    # explore_endpoint(client, "mdm", "v1", "parts", max_records=2)
