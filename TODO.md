@@ -20,11 +20,11 @@ This document outlines the step-by-step implementation plan for the Autodesk Fus
 
 ## Phase 3: Plex API Source-of-Truth Implementation
 
-- [ ] Implement API call to retrieve current tooling inventory from Plex (master list) — `mdm/v1/parts` works on PROD now, but the `limit` param is ignored so we need a real filter (`status=Active`, etc.). → [#2](https://github.com/grace-shane/plex-api/issues/2)
-- [ ] Implement API call to update/create purchased parts — `mdm/v1/parts` and `mdm/v1/suppliers` are reachable, drafting can begin. Writes are blocked at the proxy by default; opt in with `PLEX_ALLOW_WRITES=1`. → [#3](https://github.com/grace-shane/plex-api/issues/3)
-- [ ] Implement API call to create/update Tool Assemblies — `tooling/v1/tool-assemblies` returns 404 on PROD with the Fusion2Plex app. Need a working URL pattern from Insomnia. → [#4](https://github.com/grace-shane/plex-api/issues/4)
-- [ ] Implement API call to link Tool Assemblies to Routings/Operations — `manufacturing/v1/operations` returns 404 on PROD. Same problem as #4. → [#5](https://github.com/grace-shane/plex-api/issues/5)
-- [ ] Implement API call to update tooling within the specific Workcenter Document — `production/v1/control/workcenters` returns 404 on PROD. Same problem. → [#6](https://github.com/grace-shane/plex-api/issues/6)
+- [ ] Implement API call to retrieve current tooling inventory — `inventory/v1/inventory-definitions/supply-items` returns 2,516 records, of which 1,109 are `category="Tools & Inserts"`. Filter client-side. → [#2](https://github.com/grace-shane/plex-api/issues/2)
+- [ ] Implement API call to upsert supply-items — `build_supply_item_payload(fusion_tool)` writes to `inventory/v1/inventory-definitions/supply-items` with `supplyItemNumber=<vendor part-id>`. Drafting can begin against the verified read path. → [#3](https://github.com/grace-shane/plex-api/issues/3)
+- [ ] Implement Tool Assembly handling — Plex's supply-item schema is identity-only (no holder linkage). Tool assemblies as a separate concept may not exist in this app's API surface. **Investigate or descope.** → [#4](https://github.com/grace-shane/plex-api/issues/4)
+- [ ] Implement API call to link tools to Routings/Operations — `mdm/v1/operations` exposes only `code, id, inventoryType, type` with no FK to tools. **Linkage may not be possible via API**; may require CSV upload or different approach. → [#5](https://github.com/grace-shane/plex-api/issues/5)
+- [ ] Implement API call to update tooling within the specific Workcenter Document — verified read path is `production/v1/production-definitions/workcenters/{id}`. We have the workcenterCode → Brother Speedio mapping (879, 880). Write shape TBD. → [#6](https://github.com/grace-shane/plex-api/issues/6)
 - [x] **IT blocker resolved.** The Fusion2Plex app on production with the Grace tenant authenticates correctly. The earlier "tenant routing" / "subscription approvals" investigation was a red herring caused by a credential typo. See BRIEFING.md "History of incorrect hypotheses" for the postmortem. → [#1](https://github.com/grace-shane/plex-api/issues/1)
 
 ## Phase 4: Data Mapping & Sync Logic

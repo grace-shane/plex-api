@@ -35,19 +35,73 @@ X-Plex-Connect-Api-Key: <your_consumer_key>
 > Grace tenant (`58f781ba-1691-4f32-b1db-381cdb21300c`). Reproduce by
 > running the diagnostic at `/api/diagnostics/tenant` from the local UI.
 
-### Current access matrix
+### URL pattern convention
 
-| Status | Path                                    | Notes                                                |
-|--------|------------------------------------------|------------------------------------------------------|
-| **200**| `mdm/v1/tenants`                         | Returns tenant list (62 B). Used by `tenant_whoami`. |
-| **200**| `mdm/v1/parts?limit=1`                   | **19.6 MB** — `limit` IGNORED. Filter or pay the bill. |
-| **200**| `mdm/v1/suppliers?limit=1`               | 708 KB — same no-pagination behaviour.               |
-| **200**| `purchasing/v1/purchase-orders?limit=1`  | **44 MB** — full PO history.                         |
-| 404    | `tooling/v1/tools`                       | Path doesn't exist on this app's product set.        |
-| 404    | `tooling/v1/tool-assemblies`             | Same.                                                |
-| 404    | `tooling/v1/tool-inventory`              | Same.                                                |
-| 404    | `manufacturing/v1/operations`            | Same.                                                |
-| 404    | `production/v1/control/workcenters`      | Same. Issues #4, #5, #6 are blocked on finding the right URLs. |
+Plex uses two URL shapes for read endpoints:
+
+1. **Master data — flat**: `<namespace>/v1/<resource>`
+   Example: `mdm/v1/parts`, `mdm/v1/suppliers`, `mdm/v1/operations`
+2. **Definitions — nested**: `<namespace>/v1/<namespace>-definitions/<resource>`
+   Example: `production/v1/production-definitions/workcenters`,
+   `inventory/v1/inventory-definitions/supply-items`,
+   `inventory/v1/inventory-definitions/locations`
+
+Both patterns are used in production. The bare `<namespace>/v1` root
+typically returns 404 (no resource at the root); the actual data lives
+one level deeper.
+
+### Verified working endpoints
+
+| Status | Path | Records | Notes |
+|---|---|---|---|
+| **200** | `mdm/v1/tenants` | 1 | Single tenant: Grace |
+| **200** | `mdm/v1/parts` | 16,913 | Finished products + raw materials. **No tools here** — the `type` field has only `Finished Good`, `Raw Material`, `Sub Assembly` |
+| **200** | `mdm/v1/parts/{id}` | — | Per-record GET works. Same fields as the list view (no hidden detail). |
+| **200** | `mdm/v1/suppliers` | — | 708 KB |
+| **200** | `mdm/v1/customers` | — | 96 KB |
+| **200** | `mdm/v1/contacts` | — | 202 KB |
+| **200** | `mdm/v1/buildings` | — | 1.2 KB |
+| **200** | `mdm/v1/employees` | — | 272 KB |
+| **200** | `mdm/v1/operations` | 122 | Minimal: `code, id, inventoryType, type`. No FK to tools/parts/routings. |
+| **200** | `mdm/v1/operations/{id}` | — | Per-record GET works. Same fields as list. |
+| **200** | `purchasing/v1/purchase-orders` | — | 44 MB unfiltered, full PO history |
+| **200** | `production/v1/production-definitions/workcenters` | 143 | All workcenters including the 21 MILLs (codes 879, 880 = Brother Speedio FTP IPs) |
+| **200** | `production/v1/production-definitions/workcenters/{id}` | — | Fields: `buildingCode, buildingId, ipAddress, name, plcName, productionLineId, tankSilo, workcenterCode, workcenterGroup, workcenterId, workcenterType` |
+| **200** | `inventory/v1/inventory-definitions/supply-items` | 2,516 | **TOOLS LIVE HERE.** Filter to `category="Tools & Inserts"` for the 1,109 cutting tools and inserts. Schema: `category, description, group, id, inventoryUnit, supplyItemNumber, type` |
+| **200** | `inventory/v1/inventory-definitions/locations` | — | 279 KB |
+
+### Where tooling data actually lives
+
+**Cutting tools and inserts are `inventory/v1/inventory-definitions/supply-items`
+records** with `category="Tools & Inserts"`. This is NOT what the original
+`Plex_API_Reference.md` claimed — that file referenced `tooling/v1/tools` and
+`mdm/v1/parts`, neither of which works for tooling on this app.
+
+Verified empirically: 1,109 tools/inserts already exist in Plex Grace, mostly
+in `group="Machining"` (1,039) and `group="Tool Room"` (104). The supply-item
+schema is minimal — it tracks vendor part number identity, not geometry, so
+the Fusion 360 sync will:
+
+1. Read existing tools via `GET inventory/v1/inventory-definitions/supply-items`
+2. Filter client-side or via query string to `category=Tools & Inserts`
+3. Match by `supplyItemNumber` (vendor part number, e.g. Harvey Tool's `990910`)
+4. Create new supply-items for Fusion tools that don't exist
+5. Update existing ones
+
+Geometry (DC, OAL, NOF, holder details) stays in Fusion as the source of
+truth — Plex stores only the identity, description, and group/category.
+
+### Workcenter ↔ machine mapping (verified)
+
+The 21 MILL workcenter records map directly to physical Brother Speedio
+machines via the `workcenterCode` field (which equals the machine number /
+DNC IP last octet):
+
+- Workcenter `879` → Brother Speedio 879 → FTP `192.168.25.79`
+- Workcenter `880` → Brother Speedio 880 → FTP `192.168.25.80`
+
+The full mill list: 814, 825, 827, 830, 834, 835, 836, 837, 839, 840, 841,
+845, 848, 851, 865, 873, 879, 880, DEFLECT.
 
 ### Reading Plex's status codes
 
@@ -57,20 +111,22 @@ X-Plex-Connect-Api-Key: <your_consumer_key>
   from outside.
 - **404 `RESOURCE_NOT_FOUND`** — Plex's gateway has no route at that path.
   Could mean unknown URL OR subscribed-but-no-resource. Same wire response.
-- **403** — **never observed in practice on this app**, despite earlier docs
-  claiming we were getting 403 from `tooling/v1/*`. Treat any 403 as
-  unexpected.
+- **400** — Plex recognizes the path but the request is malformed (often
+  treats a string as a UUID parameter and fails to parse).
+- **403** — **never observed in practice on this app**.
 
-The 401-vs-404 distinction is **not** a clean signal. The only reliable way
-to disambiguate is to compare against a known-good client (Insomnia "Generate
-Code" output is the gold standard).
+The 401-vs-404 distinction is **not** a clean signal on its own. The only
+reliable way to disambiguate is to compare against a known-good client
+(Insomnia "Generate Code" output is the gold standard).
 
 ### No server-side pagination
 
 `mdm/v1/parts` and `purchasing/v1/purchase-orders` **silently ignore** the
 `limit` query parameter. We learned this empirically — `?limit=1` returned
-19.6 MB and 44 MB respectively. Always use a real filter (`status=Active`,
-date range, etc.) before calling these endpoints.
+19.6 MB and 44 MB respectively. The only filter we've verified actually
+works is `?status=Active` on `mdm/v1/parts` (reduces 19.6 MB → 7.8 MB).
+The `typeName` filter is also silently ignored. **Always assume `limit`
+does nothing and use real filters or accept the full DB pull.**
 
 ---
 

@@ -101,22 +101,65 @@ Fusion 360 .json (network share, via Autodesk Desktop Connector)
 
 Verified empirically against `connect.plex.com` with the Grace tenant.
 
-| Status | Path                                  | Notes                                       |
-|--------|---------------------------------------|---------------------------------------------|
-| **200**| `mdm/v1/tenants`                      | 62 B — tenant list                          |
-| **200**| `mdm/v1/parts?limit=1`                | **19.6 MB** — `limit` IGNORED, full DB dump |
-| **200**| `mdm/v1/suppliers?limit=1`            | 708 KB — same, no server-side pagination    |
-| **200**| `purchasing/v1/purchase-orders?limit=1` | **44 MB** — full PO history                |
-| 404    | `production/v1/control/workcenters`   | Path doesn't exist on this app — see History §3 |
-| 404    | `tooling/v1/tools`                    | Path doesn't exist — see History §3         |
-| 404    | `tooling/v1/tool-assemblies`          | Path doesn't exist — see History §3         |
-| 404    | `tooling/v1/tool-inventory`           | Path doesn't exist — see History §3         |
-| 404    | `manufacturing/v1/operations`         | Path doesn't exist — see History §3         |
+### URL pattern convention
 
-**The 404 endpoints either use a different URL pattern in this product
-set, or aren't available to the Fusion2Plex app at all.** The user will
-need to share working URLs from Insomnia for those endpoints to make
-progress on issues #4, #5, #6.
+Plex uses two URL shapes for read endpoints:
+
+- **Master data, flat**: `<namespace>/v1/<resource>`
+  → `mdm/v1/parts`, `mdm/v1/suppliers`, `mdm/v1/operations`
+- **Definitions, nested**: `<namespace>/v1/<namespace>-definitions/<resource>`
+  → `production/v1/production-definitions/workcenters`
+  → `inventory/v1/inventory-definitions/supply-items`
+
+### Verified working endpoints
+
+| Path | Records | What it is |
+|---|---|---|
+| `mdm/v1/tenants` | 1 | Grace tenant only |
+| `mdm/v1/parts` | 16,913 | **Finished products + raw materials only.** types: Finished Good, Raw Material, Sub Assembly. Tools are NOT here. |
+| `mdm/v1/suppliers` | — | Supplier master |
+| `mdm/v1/customers` | — | |
+| `mdm/v1/contacts` | — | |
+| `mdm/v1/buildings` | — | |
+| `mdm/v1/employees` | — | |
+| `mdm/v1/operations` | 122 | Process steps. Minimal schema. No FK to tools/parts/routings — see Gotchas. |
+| `purchasing/v1/purchase-orders` | — | 44 MB unfiltered |
+| `production/v1/production-definitions/workcenters` | 143 | Includes 21 MILLs. **Codes 879/880 = Brother Speedio FTP IPs.** |
+| `inventory/v1/inventory-definitions/supply-items` | 2,516 | **WHERE TOOLS LIVE.** Filter `category="Tools & Inserts"` for the 1,109 cutting tools and inserts. |
+| `inventory/v1/inventory-definitions/locations` | — | Inventory location master |
+
+### Where tooling data actually lives
+
+Cutting tools and inserts are **`inventory/v1/inventory-definitions/supply-items`**
+records with `category="Tools & Inserts"` and `group="Machining"`. There are
+already 1,109 tools/inserts tracked in Plex Grace. The schema is:
+
+  - `category` (e.g. "Tools & Inserts")
+  - `description`
+  - `group` (e.g. "Machining", "Tool Room")
+  - `id` (UUID)
+  - `inventoryUnit`
+  - `supplyItemNumber` (vendor part number — the dedup key)
+  - `type` (e.g. SUPPLY, OFFICE)
+
+This is **identity-only**: vendor + part number + description. Geometry
+(DC, OAL, NOF, holder) stays in Fusion as the source of truth — Plex
+stores the vendor reference and the inventory tracking. The Fusion sync
+will write to `inventory/v1/inventory-definitions/supply-items`, not to
+`mdm/v1/parts` (which is for finished products).
+
+### Workcenter ↔ machine mapping
+
+The 21 MILL workcenter records map directly to physical machines via
+`workcenterCode` (which equals the machine number / DNC IP last octet):
+
+| Brother Speedio | FTP IP | Plex workcenterCode | Plex workcenterId |
+|---|---|---|---|
+| 879 | 192.168.25.79 | `879` | `0b6cf62b-2809-4d3d-ab24-369cd0171f62` |
+| 880 | 192.168.25.80 | `880` | `8e262d5a-3ce8-4597-8726-d2b979b1b6b7` |
+
+Full mill list: 814, 825, 827, 830, 834-841, 845, 848, 851, 865, 873,
+879, 880, DEFLECT.
 
 ### How to read 401 vs 404 from Plex
 
@@ -127,6 +170,15 @@ progress on issues #4, #5, #6.
 - **The only way to tell apart cleanly** is to compare across many endpoints
   with the same auth, AND ideally compare against a known-good client
   (Insomnia → Generate Code) for ground truth.
+
+### Filter behavior — most query params are silently ignored
+
+Empirically verified: Plex's gateway accepts unknown query parameters
+without complaint and just returns the unfiltered set. The only filter
+we've seen actually work on `mdm/v1/parts` is `?status=Active` (reduces
+19.6 MB → 7.8 MB). The `typeName`, `type`, `category`, `limit` parameters
+all return the full unfiltered response. Always assume `limit` does
+nothing and use real filters or accept the full DB pull.
 
 ---
 
@@ -220,21 +272,26 @@ All items below are mirrored as GitHub Issues — see
 https://github.com/grace-shane/plex-api/issues for live status.
 
 1. ~~Fix PlexClient constructor — add api_secret, include header~~ DONE
-2. Read baseline tooling inventory from `mdm/v1/parts` — issue #2.
-   **Endpoint works** but `limit` is ignored (full DB pull is 19.6 MB).
-   Need to figure out the right filter parameter (`status=Active`,
-   maybe `type=...`) to get just consumable cutting tools.
-3. `build_part_payload(tool: dict) -> dict` — issue #3.
-   Maps Fusion tool object to `mdm/v1/parts` POST body. Drafting can
-   start now since we can read existing parts to learn the schema.
-4. `resolve_supplier_uuid(vendor_name: str) -> str` — issue #3.
-   Looks up supplier UUID from `mdm/v1/suppliers` (works on PROD now).
-5. `build_assembly_payload(tool: dict, holder: dict) -> dict` — issue #4.
-   `tooling/v1/tool-assemblies` returns 404 on PROD — need working URL
-   pattern from Insomnia.
-6. Core sync logic — upsert with guid-based dedup — issue #7.
+2. ~~Find the real Plex tooling endpoint~~ DONE — it's
+   `inventory/v1/inventory-definitions/supply-items` with
+   `category="Tools & Inserts"`. 1,109 records already exist.
+3. Read baseline tooling inventory from supply-items — issue #2.
+   Filter client-side by `category="Tools & Inserts"` since query
+   filters are mostly ignored. Save snapshot to `outputs/`.
+4. `build_supply_item_payload(fusion_tool: dict) -> dict` — issue #3.
+   Maps Fusion tool to a supply-item POST body with
+   `category="Tools & Inserts"`, `group="Machining"`,
+   `supplyItemNumber=<vendor part-id>`, `description=<fusion description>`.
+5. Match-and-upsert logic by `supplyItemNumber` — issue #3.
+   Read existing supply-items, match by vendor part number, decide
+   POST (new) vs PUT (update existing).
+6. Workcenter doc push — issue #6. Use the verified path
+   `production/v1/production-definitions/workcenters/{id}` and the
+   workcenterCode → Brother Speedio mapping (codes 879, 880).
+   We have READ-only verified; write endpoint shape still TBD.
+7. Core sync logic — upsert with `supplyItemNumber` dedup — issue #7.
    Dry-run by default. Real writes require `PLEX_ALLOW_WRITES=1`.
-7. Error handling + logging to network share text file — issue #8.
+8. Error handling + logging to network share text file — issue #8.
 
 ---
 
