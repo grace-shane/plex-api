@@ -360,3 +360,109 @@ class TestIsWriteBlocked:
         assert blocked is True
         blocked, _ = app_module._is_write_blocked("Delete")
         assert blocked is True
+
+
+# ─────────────────────────────────────────────
+# /api/plex/supply_items (issue #2)
+# ─────────────────────────────────────────────
+class TestSupplyItemsExtractor:
+    def test_route_calls_extract_supply_items(self, client):
+        with patch.object(app_module, "extract_supply_items") as mock_extract:
+            mock_extract.return_value = [
+                {"category": "Tools & Inserts", "supplyItemNumber": "990910"},
+                {"category": "Tools & Inserts", "supplyItemNumber": "ABC123"},
+            ]
+            rv = client.get("/api/plex/supply_items")
+            assert rv.status_code == 200
+            body = rv.get_json()
+            assert body["status"] == "success"
+            assert body["count"] == 2
+            assert len(body["data"]) == 2
+            mock_extract.assert_called_once()
+
+    def test_route_returns_none_safely_when_extractor_returns_none(self, client):
+        with patch.object(app_module, "extract_supply_items", return_value=None):
+            rv = client.get("/api/plex/supply_items")
+            assert rv.status_code == 200
+            body = rv.get_json()
+            assert body["count"] == 0
+            assert body["data"] == []
+
+
+# ─────────────────────────────────────────────
+# /api/fusion/tools/stats (testing harness)
+# ─────────────────────────────────────────────
+class TestFusionToolsStats:
+    SAMPLE_LIBS = {
+        "BROTHER 879": [
+            {"type": "flat end mill", "vendor": "HARVEY TOOL"},
+            {"type": "flat end mill", "vendor": "Garr Tool"},
+            {"type": "drill", "vendor": "OSG"},
+            {"type": "holder", "vendor": "Big Daishowa"},
+            {"type": "probe", "vendor": "Renishaw"},
+        ],
+        "BROTHER 880": [
+            {"type": "bull nose end mill", "vendor": "HARVEY TOOL"},
+            {"type": "holder", "vendor": "Big Daishowa"},
+        ],
+    }
+
+    def test_stats_aggregates_across_libraries(self, client):
+        with patch.object(app_module, "load_all_libraries", return_value=self.SAMPLE_LIBS):
+            rv = client.get("/api/fusion/tools/stats")
+            assert rv.status_code == 200
+            body = rv.get_json()
+            assert body["status"] == "success"
+            assert body["library_count"] == 2
+            assert body["total_records"] == 7
+            # 2 holders + 1 probe = 3 non-consumable; 4 consumables
+            assert body["consumable_count"] == 4
+            assert body["non_consumable_count"] == 3
+            assert body["global_type_counts"]["flat end mill"] == 2
+            assert body["global_type_counts"]["holder"] == 2
+            assert body["global_type_counts"]["probe"] == 1
+            assert body["global_vendor_counts"]["HARVEY TOOL"] == 2
+
+    def test_stats_handles_empty_libraries(self, client):
+        with patch.object(app_module, "load_all_libraries", return_value={}):
+            rv = client.get("/api/fusion/tools/stats")
+            assert rv.status_code == 200
+            body = rv.get_json()
+            assert body["library_count"] == 0
+            assert body["total_records"] == 0
+            assert body["consumable_count"] == 0
+
+
+# ─────────────────────────────────────────────
+# /api/fusion/tools/consumables (testing harness)
+# ─────────────────────────────────────────────
+class TestFusionToolsConsumables:
+    def test_excludes_holders_and_probes(self, client):
+        libs = {
+            "lib1": [
+                {"guid": "g1", "type": "flat end mill", "vendor": "HARVEY TOOL", "product-id": "990910", "description": "5/8 SQ"},
+                {"guid": "g2", "type": "drill", "vendor": "OSG", "product-id": "OSG-1234", "description": "1/4 drill"},
+                {"guid": "g3", "type": "holder", "vendor": "Big Daishowa", "product-id": "BIG-1", "description": "BT30"},
+                {"guid": "g4", "type": "probe", "vendor": "Renishaw", "product-id": "RNS-1", "description": "Probe"},
+            ],
+        }
+        with patch.object(app_module, "load_all_libraries", return_value=libs):
+            rv = client.get("/api/fusion/tools/consumables")
+            assert rv.status_code == 200
+            body = rv.get_json()
+            assert body["status"] == "success"
+            assert body["count"] == 2
+            guids = {c["guid"] for c in body["data"]}
+            assert guids == {"g1", "g2"}
+
+    def test_normalizes_field_names_to_snake_case(self, client):
+        libs = {
+            "lib1": [
+                {"guid": "g1", "type": "drill", "vendor": "OSG", "product-id": "X-1", "description": "drill"},
+            ],
+        }
+        with patch.object(app_module, "load_all_libraries", return_value=libs):
+            rv = client.get("/api/fusion/tools/consumables")
+            body = rv.get_json()
+            assert "product_id" in body["data"][0]  # NOT product-id
+            assert body["data"][0]["product_id"] == "X-1"

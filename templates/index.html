@@ -32,11 +32,13 @@
                     <li><button class="preset" data-method="GET" data-path="mdm/v1/parts"><span class="m m-get">GET</span><span class="p">mdm/v1/parts</span></button></li>
                     <li><button class="preset" data-method="GET" data-path="mdm/v1/suppliers"><span class="m m-get">GET</span><span class="p">mdm/v1/suppliers</span></button></li>
                     <li><button class="preset" data-method="GET" data-path="mdm/v1/tenants"><span class="m m-get">GET</span><span class="p">mdm/v1/tenants</span></button></li>
+                    <li><button class="preset" data-method="GET" data-path="mdm/v1/customers"><span class="m m-get">GET</span><span class="p">mdm/v1/customers</span></button></li>
+                    <li><button class="preset" data-method="GET" data-path="mdm/v1/buildings"><span class="m m-get">GET</span><span class="p">mdm/v1/buildings</span></button></li>
+                    <li><button class="preset" data-method="GET" data-path="mdm/v1/operations"><span class="m m-get">GET</span><span class="p">mdm/v1/operations</span></button></li>
                     <li><button class="preset" data-method="GET" data-path="purchasing/v1/purchase-orders"><span class="m m-get">GET</span><span class="p">purchasing/v1/purchase-orders</span></button></li>
-                    <li><button class="preset" data-method="GET" data-path="production/v1/control/workcenters"><span class="m m-get">GET</span><span class="p">production/v1/control/workcenters</span></button></li>
-                    <li><button class="preset" data-method="GET" data-path="tooling/v1/tools"><span class="m m-get">GET</span><span class="p">tooling/v1/tools</span></button></li>
-                    <li><button class="preset" data-method="GET" data-path="tooling/v1/tool-assemblies"><span class="m m-get">GET</span><span class="p">tooling/v1/tool-assemblies</span></button></li>
-                    <li><button class="preset" data-method="GET" data-path="tooling/v1/tool-inventory"><span class="m m-get">GET</span><span class="p">tooling/v1/tool-inventory</span></button></li>
+                    <li><button class="preset" data-method="GET" data-path="production/v1/production-definitions/workcenters"><span class="m m-get">GET</span><span class="p">production/v1/production-definitions/workcenters</span></button></li>
+                    <li><button class="preset" data-method="GET" data-path="inventory/v1/inventory-definitions/supply-items"><span class="m m-get">GET</span><span class="p">inventory/v1/inventory-definitions/supply-items</span></button></li>
+                    <li><button class="preset" data-method="GET" data-path="inventory/v1/inventory-definitions/locations"><span class="m m-get">GET</span><span class="p">inventory/v1/inventory-definitions/locations</span></button></li>
                 </ul>
             </section>
 
@@ -44,6 +46,7 @@
                 <div class="rail-label">Extractors</div>
                 <ul class="preset-list">
                     <li><button class="preset internal" data-internal="/api/plex/discover"><span class="m m-int">RUN</span><span class="p">discover_all</span></button></li>
+                    <li><button class="preset internal" data-internal="/api/plex/supply_items"><span class="m m-int">RUN</span><span class="p">extract_supply_items</span></button></li>
                     <li><button class="preset internal" data-internal="/api/plex/parts"><span class="m m-int">RUN</span><span class="p">extract_parts</span></button></li>
                     <li><button class="preset internal" data-internal="/api/plex/purchase_orders"><span class="m m-int">RUN</span><span class="p">extract_purchase_orders</span></button></li>
                     <li><button class="preset internal" data-internal="/api/plex/workcenters"><span class="m m-int">RUN</span><span class="p">extract_workcenters</span></button></li>
@@ -54,6 +57,8 @@
                 <div class="rail-label">Fusion 360 local</div>
                 <ul class="preset-list">
                     <li><button class="preset internal" data-internal="/api/fusion/tools"><span class="m m-int">RUN</span><span class="p">load_all_libraries</span></button></li>
+                    <li><button class="preset internal" data-internal="/api/fusion/tools/stats"><span class="m m-int">RUN</span><span class="p">tools_stats</span></button></li>
+                    <li><button class="preset internal" data-internal="/api/fusion/tools/consumables"><span class="m m-int">RUN</span><span class="p">consumables_only</span></button></li>
                 </ul>
                 <div class="rail-sub">
                     <button class="btn-ghost btn-xs" id="btn-pick-files">Upload files…</button>

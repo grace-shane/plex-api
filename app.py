@@ -17,6 +17,8 @@ from plex_api import (
     extract_purchase_orders,
     extract_workcenters,
     extract_operations,
+    extract_supply_items,
+    TOOLING_CATEGORY,
 )
 from tool_library_loader import load_all_libraries
 from plex_diagnostics import tenant_whoami, list_tenants, get_tenant
@@ -230,6 +232,8 @@ def api_extract(endpoint_type):
             data = extract_workcenters(client)
         elif endpoint_type == 'operations':
             data = extract_operations(client)
+        elif endpoint_type == 'supply_items':
+            data = extract_supply_items(client)
         else:
             return jsonify({"status": "error", "message": "Unknown endpoint"}), 400
 
@@ -274,6 +278,104 @@ def api_fusion_tools():
             "status": "success",
             "library_count": len(libs),
             "data": summary
+        })
+    except Exception as e:
+        return jsonify({"status": "error", "message": str(e), "trace": traceback.format_exc()}), 500
+
+
+# ─────────────────────────────────────────────
+# Fusion 360 testing-harness endpoints
+# ─────────────────────────────────────────────
+# These expose Fusion JSON data via Flask routes so the UI rail can poke
+# at the local tool libraries without re-uploading. Read-only on the
+# network share via tool_library_loader.
+
+# Tool types we exclude from the sync per BRIEFING spec — holders are
+# the geometric collision shapes, probes are measurement devices, neither
+# represent purchasable cutting tools.
+NON_CONSUMABLE_TYPES = {"holder", "probe"}
+
+
+@app.route('/api/fusion/tools/stats')
+def api_fusion_tools_stats():
+    """
+    Type and vendor distribution across all loaded Fusion libraries.
+
+    Useful for verifying load before any sync work — confirms how many
+    tools/holders/probes the loader saw and which vendors are represented.
+    """
+    try:
+        libs = load_all_libraries(abort_on_stale=True)
+
+        per_library = []
+        global_types = {}
+        global_vendors = {}
+        total_records = 0
+        consumable_count = 0
+
+        for name, tools in libs.items():
+            type_counts = {}
+            for t in tools:
+                tool_type = (t.get("type") or "unknown").strip().lower()
+                type_counts[tool_type] = type_counts.get(tool_type, 0) + 1
+                global_types[tool_type] = global_types.get(tool_type, 0) + 1
+                vendor = (t.get("vendor") or "unknown").strip()
+                global_vendors[vendor] = global_vendors.get(vendor, 0) + 1
+                total_records += 1
+                if tool_type not in NON_CONSUMABLE_TYPES:
+                    consumable_count += 1
+            per_library.append({
+                "library_name": name,
+                "tool_count": len(tools),
+                "type_counts": type_counts,
+            })
+
+        return jsonify({
+            "status": "success",
+            "library_count": len(libs),
+            "total_records": total_records,
+            "consumable_count": consumable_count,
+            "non_consumable_count": total_records - consumable_count,
+            "global_type_counts": global_types,
+            "global_vendor_counts": global_vendors,
+            "per_library": per_library,
+        })
+    except Exception as e:
+        return jsonify({"status": "error", "message": str(e), "trace": traceback.format_exc()}), 500
+
+
+@app.route('/api/fusion/tools/consumables')
+def api_fusion_tools_consumables():
+    """
+    Return the list of Fusion tools to actually push to Plex
+    (excluding holders and probes).
+
+    This is the input to ``build_supply_item_payload(fusion_tool)`` in
+    issue #3. The returned list contains only the fields the Plex sync
+    will care about: vendor, product-id, description, type, guid.
+    """
+    try:
+        libs = load_all_libraries(abort_on_stale=True)
+
+        consumables = []
+        for library_name, tools in libs.items():
+            for t in tools:
+                tool_type = (t.get("type") or "").strip().lower()
+                if tool_type in NON_CONSUMABLE_TYPES:
+                    continue
+                consumables.append({
+                    "library_name": library_name,
+                    "guid": t.get("guid"),
+                    "type": t.get("type"),
+                    "vendor": t.get("vendor"),
+                    "product_id": t.get("product-id"),
+                    "description": t.get("description"),
+                })
+
+        return jsonify({
+            "status": "success",
+            "count": len(consumables),
+            "data": consumables,
         })
     except Exception as e:
         return jsonify({"status": "error", "message": str(e), "trace": traceback.format_exc()}), 500

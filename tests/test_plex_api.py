@@ -10,7 +10,14 @@ import pytest
 import requests
 
 import plex_api
-from plex_api import PlexClient, BASE_URL, TEST_URL, GRACE_TENANT_ID
+from plex_api import (
+    PlexClient,
+    BASE_URL,
+    TEST_URL,
+    GRACE_TENANT_ID,
+    extract_supply_items,
+    TOOLING_CATEGORY,
+)
 
 
 # ─────────────────────────────────────────────
@@ -283,3 +290,80 @@ class TestGetLegacy:
         with patch("plex_api.requests.get", side_effect=requests.exceptions.ConnectionError("x")):
             result = c.get("mdm", "v1", "tenants")
         assert result is None
+
+
+# ─────────────────────────────────────────────
+# extract_supply_items — issue #2
+# ─────────────────────────────────────────────
+class TestExtractSupplyItems:
+    SAMPLE_TOOLS_AND_INSERTS = [
+        {"category": "Tools & Inserts", "supplyItemNumber": "990910", "description": "5/8 SQ END", "group": "Machining", "id": "u1", "inventoryUnit": "Each", "type": "SUPPLY"},
+        {"category": "Tools & Inserts", "supplyItemNumber": "ABC123", "description": "1/4 drill", "group": "Tool Room", "id": "u2", "inventoryUnit": "Each", "type": "SUPPLY"},
+    ]
+    SAMPLE_OFFICE = [
+        {"category": "Office Supplies", "supplyItemNumber": "PEN-01", "description": "Blue pen", "group": "Office", "id": "u3", "inventoryUnit": "Each", "type": "OFFICE"},
+    ]
+
+    def _full_set(self):
+        return self.SAMPLE_TOOLS_AND_INSERTS + self.SAMPLE_OFFICE
+
+    def test_default_filters_to_tools_and_inserts(self, fake_client, tmp_path, monkeypatch):
+        # Redirect OUTPUT_DIR so the CSV write goes to tmp
+        monkeypatch.setattr(plex_api, "OUTPUT_DIR", str(tmp_path))
+        fake_client.set_response("inventory-definitions/supply-items", self._full_set())
+        result = extract_supply_items(fake_client)
+        assert result is not None
+        assert len(result) == 2
+        for r in result:
+            assert r["category"] == TOOLING_CATEGORY
+
+    def test_filter_can_be_disabled_with_empty_string(self, fake_client, tmp_path, monkeypatch):
+        monkeypatch.setattr(plex_api, "OUTPUT_DIR", str(tmp_path))
+        fake_client.set_response("inventory-definitions/supply-items", self._full_set())
+        result = extract_supply_items(fake_client, category="")
+        # All 3 records returned, no filter
+        assert len(result) == 3
+
+    def test_filter_can_be_overridden(self, fake_client, tmp_path, monkeypatch):
+        monkeypatch.setattr(plex_api, "OUTPUT_DIR", str(tmp_path))
+        fake_client.set_response("inventory-definitions/supply-items", self._full_set())
+        result = extract_supply_items(fake_client, category="Office Supplies")
+        assert len(result) == 1
+        assert result[0]["category"] == "Office Supplies"
+
+    def test_returns_none_on_network_error(self, fake_client):
+        # No response set on the fake client → get returns None
+        result = extract_supply_items(fake_client)
+        assert result is None
+
+    def test_calls_correct_endpoint(self, fake_client, tmp_path, monkeypatch):
+        monkeypatch.setattr(plex_api, "OUTPUT_DIR", str(tmp_path))
+        fake_client.set_response("inventory-definitions/supply-items", [])
+        extract_supply_items(fake_client)
+        # The fake client should have recorded a call to inventory/v1/inventory-definitions/supply-items
+        calls = [c for c in fake_client.calls if c[0] == "inventory" and c[1] == "v1"]
+        assert len(calls) == 1
+        assert calls[0][2] == "inventory-definitions/supply-items"
+
+    def test_normalizes_dict_data_wrapper(self, fake_client, tmp_path, monkeypatch):
+        # Some Plex endpoints wrap the list in a dict — extract_supply_items
+        # should handle either shape gracefully
+        monkeypatch.setattr(plex_api, "OUTPUT_DIR", str(tmp_path))
+        fake_client.set_response(
+            "inventory-definitions/supply-items",
+            {"data": self.SAMPLE_TOOLS_AND_INSERTS},
+        )
+        result = extract_supply_items(fake_client)
+        assert len(result) == 2
+
+    def test_writes_csv_snapshot(self, fake_client, tmp_path, monkeypatch):
+        monkeypatch.setattr(plex_api, "OUTPUT_DIR", str(tmp_path))
+        fake_client.set_response("inventory-definitions/supply-items", self._full_set())
+        extract_supply_items(fake_client)
+        csv_path = tmp_path / "plex_supply_items.csv"
+        assert csv_path.exists()
+        content = csv_path.read_text(encoding="utf-8")
+        # Should have the 2 tools-and-inserts records, not the office one
+        assert "990910" in content
+        assert "ABC123" in content
+        assert "PEN-01" not in content

@@ -312,6 +312,77 @@ def extract_operations(client):
     return results
 
 
+# Category strings used by Plex Grace's supply-items records to identify
+# cutting tools and inserts. Verified empirically against the live API
+# on 2026-04-07. There are 1,109 such records on the Grace tenant.
+TOOLING_CATEGORY = "Tools & Inserts"
+
+
+def extract_supply_items(client, category=None):
+    """
+    Pull supply-items from Plex and (by default) filter to cutting tools.
+
+    Issue #2 — read the baseline tooling inventory from Plex.
+
+    Plex Grace stores cutting tools and inserts as ``supply-items`` under
+    ``inventory/v1/inventory-definitions/supply-items``, NOT under
+    ``mdm/v1/parts`` (which is finished products). The schema is
+    identity-only — vendor part number, description, category, group —
+    no geometry. Geometry stays in Fusion as the source of truth.
+
+    Server-side query filters on this endpoint are silently ignored, so
+    we always pull the full set (~614 KB / 2,516 records on Grace) and
+    filter client-side.
+
+    Parameters
+    ----------
+    client : PlexClient
+    category : str | None
+        If provided, keep only records whose ``category`` matches.
+        Defaults to ``"Tools & Inserts"``. Pass ``""`` (empty string)
+        to disable the filter and return everything.
+
+    Returns
+    -------
+    list[dict] | None
+        The matching supply-item records, or None on a network/auth
+        failure. Records are also written to
+        ``outputs/plex_supply_items.csv`` for diff/snapshot use.
+    """
+    if category is None:
+        category = TOOLING_CATEGORY
+
+    print("\nExtracting Supply Items...")
+    raw = client.get("inventory", "v1", "inventory-definitions/supply-items")
+
+    if raw is None:
+        print("  No response — credentials, network, or subscription issue")
+        return None
+
+    # The response shape is a bare list of dicts (verified empirically)
+    if isinstance(raw, dict):
+        records = raw.get("data") or raw.get("items") or raw.get("rows") or []
+    else:
+        records = raw or []
+
+    total = len(records)
+
+    # Client-side filter
+    if category:
+        records = [r for r in records if r.get("category") == category]
+        print(f"  Pulled {total} supply-items, filtered to {len(records)} "
+              f"with category={category!r}")
+    else:
+        print(f"  Pulled {total} supply-items (no filter)")
+
+    if records:
+        out = os.path.join(OUTPUT_DIR, "plex_supply_items.csv")
+        write_csv(records, out)
+        print(f"  Saved {len(records)} supply-items → {out}")
+
+    return records
+
+
 # ─────────────────────────────────────────────
 # UTILITY
 # ─────────────────────────────────────────────
