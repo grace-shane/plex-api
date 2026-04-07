@@ -2,12 +2,15 @@
 Tests for plex_api.PlexClient — header construction, configuration,
 and the get_envelope() method.
 """
+import importlib
+import os
 from unittest.mock import MagicMock, patch
 
 import pytest
 import requests
 
-from plex_api import PlexClient, BASE_URL, TEST_URL
+import plex_api
+from plex_api import PlexClient, BASE_URL, TEST_URL, GRACE_TENANT_ID
 
 
 # ─────────────────────────────────────────────
@@ -85,6 +88,52 @@ class TestPlexClientThrottle:
         assert c._call_count == 1
         c._throttle()
         assert c._call_count == 2
+
+
+# ─────────────────────────────────────────────
+# Module-level config: env-var driven defaults
+# ─────────────────────────────────────────────
+class TestModuleDefaults:
+    def test_grace_tenant_id_constant_is_verified_uuid(self):
+        # The verified Grace tenant ID returned by the live API on 2026-04-07
+        assert GRACE_TENANT_ID == "58f781ba-1691-4f32-b1db-381cdb21300c"
+
+    def test_tenant_id_defaults_to_grace_when_env_unset(self, monkeypatch):
+        monkeypatch.delenv("PLEX_TENANT_ID", raising=False)
+        importlib.reload(plex_api)
+        assert plex_api.TENANT_ID == GRACE_TENANT_ID
+        # Restore for downstream tests
+        importlib.reload(plex_api)
+
+    def test_tenant_id_uses_env_var_when_set(self, monkeypatch):
+        monkeypatch.setenv("PLEX_TENANT_ID", "custom-tenant-uuid")
+        importlib.reload(plex_api)
+        assert plex_api.TENANT_ID == "custom-tenant-uuid"
+        importlib.reload(plex_api)
+
+    def test_use_test_defaults_false(self, monkeypatch):
+        monkeypatch.delenv("PLEX_USE_TEST", raising=False)
+        importlib.reload(plex_api)
+        assert plex_api.USE_TEST is False
+        importlib.reload(plex_api)
+
+    def test_use_test_true_when_env_var_is_1(self, monkeypatch):
+        monkeypatch.setenv("PLEX_USE_TEST", "1")
+        importlib.reload(plex_api)
+        assert plex_api.USE_TEST is True
+        importlib.reload(plex_api)
+
+    def test_use_test_true_when_env_var_is_true(self, monkeypatch):
+        monkeypatch.setenv("PLEX_USE_TEST", "true")
+        importlib.reload(plex_api)
+        assert plex_api.USE_TEST is True
+        importlib.reload(plex_api)
+
+    def test_use_test_false_when_env_var_is_garbage(self, monkeypatch):
+        monkeypatch.setenv("PLEX_USE_TEST", "nope")
+        importlib.reload(plex_api)
+        assert plex_api.USE_TEST is False
+        importlib.reload(plex_api)
 
 
 # ─────────────────────────────────────────────

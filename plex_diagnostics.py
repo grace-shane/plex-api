@@ -16,13 +16,22 @@ from typing import Any
 # Known tenants
 # Tenant IDs are not secrets — committing them is fine. These labels are
 # used to make the whoami report human-readable.
+#
+# History: an earlier version of BRIEFING.md listed a different Grace UUID
+# (a6af9c99-bce5-4938-a007-364dc5603d08). That value is dead — verified
+# empirically against the live API. The real Grace tenant ID is the one
+# below, which the Plex API itself returns when you GET mdm/v1/tenants
+# with the Fusion2Plex Consumer Key. The old UUID is kept here labeled
+# "Grace (stale)" so anyone hitting it gets a clear signal.
 # ─────────────────────────────────────────────
-GRACE_TENANT_ID = "a6af9c99-bce5-4938-a007-364dc5603d08"
-G5_TENANT_ID    = "b406c8c4-cef0-4d62-862c-1758b702cd02"
+GRACE_TENANT_ID         = "58f781ba-1691-4f32-b1db-381cdb21300c"  # verified Apr 2026
+GRACE_OLD_TENANT_ID     = "a6af9c99-bce5-4938-a007-364dc5603d08"  # dead, kept for diagnostics
+G5_TENANT_ID            = "b406c8c4-cef0-4d62-862c-1758b702cd02"
 
 KNOWN_TENANTS = {
-    GRACE_TENANT_ID: "Grace Engineering",
-    G5_TENANT_ID:    "G5",
+    GRACE_TENANT_ID:     "Grace Engineering",
+    GRACE_OLD_TENANT_ID: "Grace (stale UUID — replace with verified one)",
+    G5_TENANT_ID:        "G5",
 }
 
 

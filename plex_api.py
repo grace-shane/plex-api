@@ -21,18 +21,36 @@ import os
 from datetime import datetime
 
 # ─────────────────────────────────────────────
-# CONFIGURATION — fill these in
+# CONFIGURATION
 # ─────────────────────────────────────────────
-# Credentials come from environment variables — never hardcode/commit.
-#   PLEX_API_KEY     — Consumer Key from developers.plex.com → My Apps
-#   PLEX_API_SECRET  — Consumer Secret, paired with the key
-API_KEY     = os.environ.get("PLEX_API_KEY", "")
-API_SECRET  = os.environ.get("PLEX_API_SECRET", "")
-# Tenant IDs are not secrets — safe to commit. G5 is what we currently have access to.
-TENANT_ID   = "b406c8c4-cef0-4d62-862c-1758b702cd02"  # G5 (read-only) — Grace UUID = a6af9c99-bce5-4938-a007-364dc5603d08
-BASE_URL    = "https://connect.plex.com"
-TEST_URL    = "https://test.connect.plex.com"
-USE_TEST    = True                           # all dev work goes against test.connect.plex.com
+# All values come from environment variables (loaded via bootstrap.py
+# from .env.local). Credentials are never hardcoded or committed.
+#
+#   PLEX_API_KEY      — Consumer Key from the Plex Developer Portal
+#   PLEX_API_SECRET   — Consumer Secret (currently optional — Plex
+#                       gateway authenticates on key alone)
+#   PLEX_TENANT_ID    — Target tenant UUID. Default is the Grace
+#                       Engineering production tenant. Tenant IDs
+#                       are not secrets, safe to commit as defaults.
+#   PLEX_USE_TEST     — "1" to hit test.connect.plex.com instead of
+#                       connect.plex.com (production). Default is False
+#                       because the current Fusion2Plex app only exists
+#                       in the production environment.
+#
+# History note: an earlier version of this file hardcoded an old
+# Consumer Key and the wrong Grace UUID (a6af9c99-...). Both are dead.
+# The verified-working configuration is what's defaulted below.
+GRACE_TENANT_ID = "58f781ba-1691-4f32-b1db-381cdb21300c"
+
+API_KEY    = os.environ.get("PLEX_API_KEY", "")
+API_SECRET = os.environ.get("PLEX_API_SECRET", "")
+TENANT_ID  = os.environ.get("PLEX_TENANT_ID", GRACE_TENANT_ID)
+
+BASE_URL = "https://connect.plex.com"
+TEST_URL = "https://test.connect.plex.com"
+USE_TEST = os.environ.get("PLEX_USE_TEST", "").strip().lower() in (
+    "1", "true", "yes", "on", "enabled",
+)
 
 OUTPUT_DIR   = "C:/projects/plex-api/outputs"
 TOOL_LIB_DIR = "Z:\\Engineering\\Tooling\\Fusion_Libraries"  # Mapped drive path containing JSON files
@@ -421,9 +439,9 @@ def explore_parts(client):
 
 
 if __name__ == "__main__":
-    if not API_KEY or not API_SECRET:
+    if not API_KEY:
         raise SystemExit(
-            "Missing credentials. Set PLEX_API_KEY and PLEX_API_SECRET environment variables."
+            "Missing PLEX_API_KEY. Set it in the environment or in .env.local."
         )
 
     client = PlexClient(
@@ -435,10 +453,18 @@ if __name__ == "__main__":
 
     print(f"Plex API Client — {'TEST' if USE_TEST else 'PRODUCTION'}")
     print(f"Base URL: {client.base}")
-    print(f"Key: {API_KEY[:8]}{'*' * 20}")
+    print(f"Tenant:   {TENANT_ID or '(default)'}")
+    print(f"Key:      {API_KEY[:8]}{'*' * 20}")
+    print(f"Secret:   {'set' if API_SECRET else '(unset — Plex authenticates on key alone)'}")
+
+    if not USE_TEST:
+        print()
+        print("WARNING: Connected to PRODUCTION Plex environment.")
+        print("         Reads are safe. Writes are blocked at the proxy unless")
+        print("         PLEX_ALLOW_WRITES=1 is also set in the environment.")
 
     # ── Focus: Parts endpoint exploration
-    explore_parts(client)
+    # explore_parts(client)  # NOTE: pulls 19 MB unfiltered — leave commented
 
     # ── Other exploration (uncomment as needed)
     # discover_all(client)

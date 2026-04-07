@@ -27,41 +27,50 @@ X-Plex-Connect-Api-Key: <your_consumer_key>
 
 ---
 
-## 3. Discovered Endpoints & Subscription Status
-
-The target architecture requires pushing Fusion 360 data to the Tooling/Workcenter endpoints. Initial discovery revealed that certain API collections require activation by IT.
-
-### ✅ Working Endpoints
-
-| Collection | Endpoint | Purpose |
-|---|---|---|
-| Master Data | `mdm/v1/parts` | Returns master part records. Confirmed working. |
-| Master Data | `mdm/v1/suppliers` | Returns supplier UUIDs (e.g., MSC Industrial). |
-| Purchasing | `purchasing/v1/purchase-orders` | Returns full PO headers (e.g., tooling orders from MSC). |
-| Production | `production/v1/control/workcenters` | Discovered on Dev Portal. Replaces old 404 manufacturing endpoint. |
-
-### API Product Subscription Model
+## 3. Verified Endpoints & Access Matrix
 
 > [!IMPORTANT]
-> Plex requires each Consumer Key to be **explicitly subscribed** to API products in the developer portal before any URI under that product is reachable. An unsubscribed product returns **HTTP 401 `REQUEST_NOT_AUTHENTICATED`** at the gateway, *not* 403 — same wire response as bad credentials, which makes diagnosing this without an access matrix surprisingly hard.
->
-> Verified empirically against the Grace `Fusion2Plex` app (April 2026): `tooling/v1/*` returns `404 RESOURCE_NOT_FOUND` (auth ok, just no resource at that path), while unsubscribed products like `mdm/v1/*` return `401 REQUEST_NOT_AUTHENTICATED`. The 401-vs-404 distinction is the only way to tell from outside the portal whether a product is enabled.
+> All values below were verified empirically against `connect.plex.com`
+> (production) on **2026-04-07** with the `Fusion2Plex` Consumer Key on the
+> Grace tenant (`58f781ba-1691-4f32-b1db-381cdb21300c`). Reproduce by
+> running the diagnostic at `/api/diagnostics/tenant` from the local UI.
 
-#### Current access matrix for the `Fusion2Plex` app
+### Current access matrix
 
-| Path                                  | Status | Subscribed? |
-|---------------------------------------|--------|-------------|
-| `mdm/v1/tenants`                      | 401    | ❌ Common APIs not approved |
-| `mdm/v1/parts`                        | 401    | ❌ Common APIs not approved |
-| `mdm/v1/suppliers`                    | 401    | ❌ Common APIs not approved |
-| `purchasing/v1/purchase-orders`       | 401    | ❌ Purchasing not approved |
-| `production/v1/control/workcenters`   | 401    | ❌ Production Control not approved |
-| `manufacturing/v1/operations`         | 404    | ✅ Standalone MES approved |
-| `tooling/v1/tools`                    | 404    | ✅ Tooling approved |
-| `tooling/v1/tool-assemblies`          | 404    | ✅ Tooling approved |
-| `tooling/v1/tool-inventory`           | 404    | ✅ Tooling approved |
+| Status | Path                                    | Notes                                                |
+|--------|------------------------------------------|------------------------------------------------------|
+| **200**| `mdm/v1/tenants`                         | Returns tenant list (62 B). Used by `tenant_whoami`. |
+| **200**| `mdm/v1/parts?limit=1`                   | **19.6 MB** — `limit` IGNORED. Filter or pay the bill. |
+| **200**| `mdm/v1/suppliers?limit=1`               | 708 KB — same no-pagination behaviour.               |
+| **200**| `purchasing/v1/purchase-orders?limit=1`  | **44 MB** — full PO history.                         |
+| 404    | `tooling/v1/tools`                       | Path doesn't exist on this app's product set.        |
+| 404    | `tooling/v1/tool-assemblies`             | Same.                                                |
+| 404    | `tooling/v1/tool-inventory`              | Same.                                                |
+| 404    | `manufacturing/v1/operations`            | Same.                                                |
+| 404    | `production/v1/control/workcenters`      | Same. Issues #4, #5, #6 are blocked on finding the right URLs. |
 
-**Pending IT action**: ask Courtney to also approve the `Fusion2Plex` app for **Common APIs**, **Purchasing**, and **Production Control** so we can read parts/suppliers, look up POs, and push workcenter docs.
+### Reading Plex's status codes
+
+- **200** — success.
+- **401 `REQUEST_NOT_AUTHENTICATED`** — bad credentials OR a recognized
+  namespace your app isn't subscribed to. Same wire response, indistinguishable
+  from outside.
+- **404 `RESOURCE_NOT_FOUND`** — Plex's gateway has no route at that path.
+  Could mean unknown URL OR subscribed-but-no-resource. Same wire response.
+- **403** — **never observed in practice on this app**, despite earlier docs
+  claiming we were getting 403 from `tooling/v1/*`. Treat any 403 as
+  unexpected.
+
+The 401-vs-404 distinction is **not** a clean signal. The only reliable way
+to disambiguate is to compare against a known-good client (Insomnia "Generate
+Code" output is the gold standard).
+
+### No server-side pagination
+
+`mdm/v1/parts` and `purchasing/v1/purchase-orders` **silently ignore** the
+`limit` query parameter. We learned this empirically — `?limit=1` returned
+19.6 MB and 44 MB respectively. Always use a real filter (`status=Active`,
+date range, etc.) before calling these endpoints.
 
 ---
 

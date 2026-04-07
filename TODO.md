@@ -20,12 +20,12 @@ This document outlines the step-by-step implementation plan for the Autodesk Fus
 
 ## Phase 3: Plex API Source-of-Truth Implementation
 
-- [ ] Implement API call to retrieve current tooling inventory from Plex (master list) to prep for overwrite. → [#2](https://github.com/grace-shane/plex-api/issues/2)
-- [ ] Implement API call to update/create purchased parts (focused first on **consumables** like cutting tools) in Plex. → [#3](https://github.com/grace-shane/plex-api/issues/3)
-- [ ] Implement API call to create/update Tool Assemblies, assigning the purchased consumable parts to them. → [#4](https://github.com/grace-shane/plex-api/issues/4)
-- [ ] Implement API call to link Tool Assemblies to Routings/Operations. → [#5](https://github.com/grace-shane/plex-api/issues/5)
-- [ ] Implement API call to update tooling within the specific Workcenter Document (`production/v1/control/workcenters`). → [#6](https://github.com/grace-shane/plex-api/issues/6)
-- [ ] **PARTIALLY BLOCKED**: New `Fusion2Plex` app from Courtney is approved for **Tooling** and **Standalone MES** API products (those endpoints now return 404 instead of 403 — auth ok). Still waiting on Courtney to also approve **Common APIs**, **Purchasing**, and **Production Control** for the same app. The earlier "tenant routing" hypothesis was wrong; this was per-product subscription all along. → [#1](https://github.com/grace-shane/plex-api/issues/1)
+- [ ] Implement API call to retrieve current tooling inventory from Plex (master list) — `mdm/v1/parts` works on PROD now, but the `limit` param is ignored so we need a real filter (`status=Active`, etc.). → [#2](https://github.com/grace-shane/plex-api/issues/2)
+- [ ] Implement API call to update/create purchased parts — `mdm/v1/parts` and `mdm/v1/suppliers` are reachable, drafting can begin. Writes are blocked at the proxy by default; opt in with `PLEX_ALLOW_WRITES=1`. → [#3](https://github.com/grace-shane/plex-api/issues/3)
+- [ ] Implement API call to create/update Tool Assemblies — `tooling/v1/tool-assemblies` returns 404 on PROD with the Fusion2Plex app. Need a working URL pattern from Insomnia. → [#4](https://github.com/grace-shane/plex-api/issues/4)
+- [ ] Implement API call to link Tool Assemblies to Routings/Operations — `manufacturing/v1/operations` returns 404 on PROD. Same problem as #4. → [#5](https://github.com/grace-shane/plex-api/issues/5)
+- [ ] Implement API call to update tooling within the specific Workcenter Document — `production/v1/control/workcenters` returns 404 on PROD. Same problem. → [#6](https://github.com/grace-shane/plex-api/issues/6)
+- [x] **IT blocker resolved.** The Fusion2Plex app on production with the Grace tenant authenticates correctly. The earlier "tenant routing" / "subscription approvals" investigation was a red herring caused by a credential typo. See BRIEFING.md "History of incorrect hypotheses" for the postmortem. → [#1](https://github.com/grace-shane/plex-api/issues/1)
 
 ## Phase 4: Data Mapping & Sync Logic
 

@@ -16,6 +16,7 @@ import pytest
 
 from plex_diagnostics import (
     GRACE_TENANT_ID,
+    GRACE_OLD_TENANT_ID,
     G5_TENANT_ID,
     KNOWN_TENANTS,
     list_tenants,
@@ -28,16 +29,28 @@ from plex_diagnostics import (
 # Constants sanity
 # ─────────────────────────────────────────────
 class TestKnownTenants:
+    def test_grace_tenant_id_is_verified_uuid(self):
+        # Verified empirically against the live API on 2026-04-07
+        assert GRACE_TENANT_ID == "58f781ba-1691-4f32-b1db-381cdb21300c"
+
     def test_grace_tenant_id_in_known(self):
         assert GRACE_TENANT_ID in KNOWN_TENANTS
         assert KNOWN_TENANTS[GRACE_TENANT_ID] == "Grace Engineering"
+
+    def test_grace_old_tenant_id_kept_as_stale(self):
+        # The wrong UUID from earlier docs is preserved with a "stale" label
+        # so anyone hitting it gets a clear signal instead of "unknown"
+        assert GRACE_OLD_TENANT_ID == "a6af9c99-bce5-4938-a007-364dc5603d08"
+        assert GRACE_OLD_TENANT_ID in KNOWN_TENANTS
+        assert "stale" in KNOWN_TENANTS[GRACE_OLD_TENANT_ID].lower()
 
     def test_g5_tenant_id_in_known(self):
         assert G5_TENANT_ID in KNOWN_TENANTS
         assert KNOWN_TENANTS[G5_TENANT_ID] == "G5"
 
-    def test_grace_and_g5_are_distinct(self):
-        assert GRACE_TENANT_ID != G5_TENANT_ID
+    def test_all_known_tenants_are_distinct(self):
+        ids = [GRACE_TENANT_ID, GRACE_OLD_TENANT_ID, G5_TENANT_ID]
+        assert len(set(ids)) == len(ids), "tenant IDs must be unique"
 
 
 # ─────────────────────────────────────────────

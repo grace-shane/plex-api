@@ -15,6 +15,7 @@
     const urlHostEl  = $("#url-host");
     const sendBtn    = $("#btn-send");
     const envChipEl  = $("#env-chip");
+    const writesChipEl = $("#writes-chip");
 
     const statusStripEl = $("#status-strip");
     const respPre       = $("#resp-pre");
@@ -47,10 +48,39 @@
             const r = await fetch("/api/config");
             const cfg = await r.json();
             urlHostEl.textContent = `${cfg.base_url}/`;
-            envChipEl.textContent = cfg.environment;
+
+            // Environment chip
+            envChipEl.textContent = cfg.environment === "production" ? "PROD" : "TEST";
             envChipEl.classList.remove("test", "prod");
-            envChipEl.classList.add(cfg.environment === "test" ? "test" : "prod");
-            envChipEl.title = `Tenant ${cfg.tenant_id || "(default)"} · key:${cfg.has_key ? "✓" : "✗"} secret:${cfg.has_secret ? "✓" : "✗"}`;
+            envChipEl.classList.add(cfg.is_production ? "prod" : "test");
+            envChipEl.title =
+                `Tenant ${cfg.tenant_id || "(default)"} · ` +
+                `key:${cfg.has_key ? "✓" : "✗"} ` +
+                `secret:${cfg.has_secret ? "✓" : "✗"}`;
+
+            // Writes chip — only meaningful in production
+            if (cfg.is_production) {
+                writesChipEl.classList.remove("hidden");
+                if (cfg.writes_allowed) {
+                    writesChipEl.textContent = "WRITES ON";
+                    writesChipEl.classList.remove("blocked");
+                    writesChipEl.classList.add("allowed");
+                    writesChipEl.title =
+                        "PLEX_ALLOW_WRITES is set. POST/PUT/PATCH/DELETE to " +
+                        "production are ENABLED. Every mutating call hits real " +
+                        "Grace Engineering production data.";
+                } else {
+                    writesChipEl.textContent = "READ ONLY";
+                    writesChipEl.classList.remove("allowed");
+                    writesChipEl.classList.add("blocked");
+                    writesChipEl.title =
+                        "Production write guard active. POST/PUT/PATCH/DELETE " +
+                        "to production are blocked at the proxy. To enable, set " +
+                        "PLEX_ALLOW_WRITES=1 in the environment and restart.";
+                }
+            } else {
+                writesChipEl.classList.add("hidden");
+            }
         } catch (e) {
             envChipEl.textContent = "offline";
         }
