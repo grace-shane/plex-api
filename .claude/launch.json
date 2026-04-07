@@ -4,7 +4,7 @@
     {
       "name": "plex-api",
       "runtimeExecutable": "py",
-      "runtimeArgs": ["app.py"],
+      "runtimeArgs": ["run_dev.py"],
       "port": 5000
     }
   ]
