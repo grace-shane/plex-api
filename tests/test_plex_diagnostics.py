@@ -78,7 +78,9 @@ class TestTenantWhoami:
         assert "[WARN]" in report["summary"]
 
     def test_no_data_when_list_returns_none(self, fake_client):
-        # No set_response → fake_client.get returns None
+        # No set_response → FakePlexClient.get_envelope synthesizes a 200 OK
+        # with body=None → tenant_whoami should still report no_data because
+        # there are no parseable IDs to work with.
         report = tenant_whoami(fake_client, G5_TENANT_ID)
         assert report["match"] == "no_data"
         assert "no data" in report["summary"].lower()
@@ -87,6 +89,7 @@ class TestTenantWhoami:
         fake_client.set_response("tenants", [])
         report = tenant_whoami(fake_client, G5_TENANT_ID)
         assert report["match"] == "no_data"
+        assert "no data" in report["summary"].lower()
 
     def test_unknown_tenant_match(self, fake_client):
         unknown_id = "11111111-2222-3333-4444-555555555555"
@@ -200,3 +203,113 @@ class TestReportStructure:
         fake_client.set_response("tenants", [{"id": G5_TENANT_ID}])
         report = tenant_whoami(fake_client, "")
         assert report["get_tenant_raw"] is None
+
+    def test_report_includes_envelope_metadata(self, fake_client):
+        fake_client.set_response("tenants", [{"id": G5_TENANT_ID}])
+        report = tenant_whoami(fake_client, G5_TENANT_ID)
+        env = report["list_tenants_envelope"]
+        assert env is not None
+        assert env["ok"] is True
+        assert env["status"] == 200
+        assert env["error"] is None
+
+
+# ─────────────────────────────────────────────
+# HTTP error visibility — the whole reason for this PR
+# ─────────────────────────────────────────────
+def _err_envelope(status, reason, error_msg, body=None):
+    """Build a fake error envelope as PlexClient.get_envelope would return."""
+    return {
+        "ok": False,
+        "status": status,
+        "reason": reason,
+        "body": body,
+        "elapsed_ms": 100,
+        "url": "https://test.connect.plex.com/mdm/v1/tenants",
+        "error": error_msg,
+    }
+
+
+class TestAuthFailureBranch:
+    def test_401_maps_to_auth_failed(self, fake_client):
+        fake_client.set_envelope("tenants", _err_envelope(
+            401, "Unauthorized", "HTTP 401 Unauthorized",
+            body={"code": "REQUEST_NOT_AUTHENTICATED"}
+        ))
+        report = tenant_whoami(fake_client, G5_TENANT_ID)
+        assert report["match"] == "auth_failed"
+        assert "401" in report["summary"]
+        assert "PLEX_API_KEY" in report["summary"]
+        assert "PLEX_API_SECRET" in report["summary"]
+
+    def test_403_maps_to_auth_failed(self, fake_client):
+        fake_client.set_envelope("tenants", _err_envelope(
+            403, "Forbidden", "HTTP 403 Forbidden"
+        ))
+        report = tenant_whoami(fake_client, G5_TENANT_ID)
+        assert report["match"] == "auth_failed"
+        assert "403" in report["summary"]
+
+    def test_auth_failed_preserves_envelope_metadata(self, fake_client):
+        fake_client.set_envelope("tenants", _err_envelope(
+            401, "Unauthorized", "HTTP 401 Unauthorized"
+        ))
+        report = tenant_whoami(fake_client, G5_TENANT_ID)
+        env = report["list_tenants_envelope"]
+        assert env["ok"] is False
+        assert env["status"] == 401
+        assert env["error"] == "HTTP 401 Unauthorized"
+
+    def test_auth_failed_does_not_call_get_tenant(self, fake_client):
+        fake_client.set_envelope("tenants", _err_envelope(
+            401, "Unauthorized", "x"
+        ))
+        tenant_whoami(fake_client, G5_TENANT_ID)
+        # Only the list call should have been made, not the by-id call
+        list_calls = [c for c in fake_client.calls if c[2] == "tenants"]
+        get_calls = [c for c in fake_client.calls if c[2] == f"tenants/{G5_TENANT_ID}"]
+        assert len(list_calls) == 1
+        assert len(get_calls) == 0
+
+
+class TestRequestFailedBranch:
+    def test_network_error_maps_to_request_failed(self, fake_client):
+        fake_client.set_envelope("tenants", _err_envelope(
+            0, "ConnectionError", "Connection refused"
+        ))
+        report = tenant_whoami(fake_client, G5_TENANT_ID)
+        assert report["match"] == "request_failed"
+        assert "could not reach" in report["summary"].lower()
+        assert "Connection refused" in report["summary"]
+
+    def test_timeout_maps_to_request_failed(self, fake_client):
+        fake_client.set_envelope("tenants", _err_envelope(
+            0, "Timeout", "Read timed out"
+        ))
+        report = tenant_whoami(fake_client, G5_TENANT_ID)
+        assert report["match"] == "request_failed"
+
+    def test_404_maps_to_request_failed(self, fake_client):
+        fake_client.set_envelope("tenants", _err_envelope(
+            404, "Not Found", "HTTP 404 Not Found"
+        ))
+        report = tenant_whoami(fake_client, G5_TENANT_ID)
+        assert report["match"] == "request_failed"
+        assert "404" in report["summary"]
+
+    def test_500_maps_to_request_failed(self, fake_client):
+        fake_client.set_envelope("tenants", _err_envelope(
+            500, "Internal Server Error", "HTTP 500 Internal Server Error"
+        ))
+        report = tenant_whoami(fake_client, G5_TENANT_ID)
+        assert report["match"] == "request_failed"
+        assert "500" in report["summary"]
+
+    def test_request_failed_preserves_envelope_metadata(self, fake_client):
+        fake_client.set_envelope("tenants", _err_envelope(
+            500, "Internal Server Error", "HTTP 500"
+        ))
+        report = tenant_whoami(fake_client, G5_TENANT_ID)
+        env = report["list_tenants_envelope"]
+        assert env["status"] == 500
+        assert env["ok"] is False

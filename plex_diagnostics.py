@@ -62,15 +62,21 @@ def tenant_whoami(client, configured_tenant_id: str = "") -> dict:
     then compares the visible tenant(s) against the known Grace and G5 UUIDs
     so the UI can show a clear "is this the right tenant?" status.
 
+    Uses ``client.get_envelope()`` so HTTP errors (401, 403, 404, 5xx) and
+    network failures surface as distinct ``match`` values instead of being
+    swallowed into ``no_data``.
+
     Returns a structured report:
         {
             "configured_tenant_id":    "<uuid or ''>",
             "configured_tenant_label": "Grace Engineering" | "G5" | "unknown",
             "visible_tenants":         [{id, code, name, label}, ...],
-            "list_tenants_raw":        <raw API response>,
-            "get_tenant_raw":          <raw API response or None>,
+            "list_tenants_raw":        <raw API body>,
+            "list_tenants_envelope":   {ok, status, reason, elapsed_ms, error},
+            "get_tenant_raw":          <raw API body or None>,
             "match":                   "grace" | "g5" | "configured" |
-                                       "other" | "no_data",
+                                       "other" | "no_data" |
+                                       "auth_failed" | "request_failed",
             "summary":                 "<one-line human-readable status>",
         }
     """
@@ -79,21 +85,47 @@ def tenant_whoami(client, configured_tenant_id: str = "") -> dict:
         "configured_tenant_label": KNOWN_TENANTS.get(configured_tenant_id, "unknown"),
         "visible_tenants":         [],
         "list_tenants_raw":        None,
+        "list_tenants_envelope":   None,
         "get_tenant_raw":          None,
         "match":                   "no_data",
         "summary":                 "",
     }
 
-    # ── Step 1: list_tenants ────────────────────
-    listed = list_tenants(client)
-    report["list_tenants_raw"] = listed
+    # ── Step 1: list_tenants via get_envelope so HTTP errors surface ────
+    list_env = client.get_envelope("mdm", "v1", "tenants")
+    report["list_tenants_envelope"] = {
+        "ok":         list_env["ok"],
+        "status":     list_env["status"],
+        "reason":     list_env["reason"],
+        "elapsed_ms": list_env["elapsed_ms"],
+        "error":      list_env["error"],
+    }
+    report["list_tenants_raw"] = list_env["body"]
 
-    if listed is None:
-        report["summary"] = (
-            "list_tenants returned no data — credentials likely invalid, "
-            "or test.connect.plex.com is unreachable."
-        )
+    if not list_env["ok"]:
+        status = list_env["status"]
+        if status in (401, 403):
+            report["match"] = "auth_failed"
+            report["summary"] = (
+                f"[ERROR] list_tenants returned HTTP {status} {list_env['reason']}. "
+                f"Check that PLEX_API_KEY and PLEX_API_SECRET are valid in .env.local "
+                f"or your shell environment. Underlying error: {list_env['error']}"
+            )
+        elif status == 0:
+            report["match"] = "request_failed"
+            report["summary"] = (
+                f"[ERROR] list_tenants could not reach Plex: {list_env['error']}. "
+                f"Check network connectivity and that {client.base} is reachable."
+            )
+        else:
+            report["match"] = "request_failed"
+            report["summary"] = (
+                f"[ERROR] list_tenants returned HTTP {status} {list_env['reason']}: "
+                f"{list_env['error']}"
+            )
         return report
+
+    listed = list_env["body"]
 
     # Normalize the response. Plex sometimes wraps lists in {data|items|rows}.
     if isinstance(listed, list):
@@ -131,8 +163,9 @@ def tenant_whoami(client, configured_tenant_id: str = "") -> dict:
     if not visible_ids:
         report["match"] = "no_data"
         report["summary"] = (
-            "list_tenants returned a response but no tenant IDs could be parsed. "
-            "Check the raw response in this report."
+            "list_tenants returned no data — the response was empty or "
+            "contained no parseable tenant IDs. Check the raw response "
+            "in this report."
         )
         return report
 

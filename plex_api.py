@@ -71,20 +71,87 @@ class PlexClient:
             self._window_start = time.time()
 
     def get(self, collection, version, resource, params=None):
-        """GET request with auto-throttling and error handling"""
+        """
+        GET request with auto-throttling.
+
+        Returns the parsed JSON body on success, or None on any failure.
+        Backward-compatible legacy interface — callers that need to know
+        WHY a request failed (auth error vs network error vs 404 vs JSON
+        parse failure) should use ``get_envelope()`` instead.
+        """
+        env = self.get_envelope(collection, version, resource, params)
+        if not env["ok"]:
+            # Preserve the historical "log to stdout" behaviour for the
+            # legacy callers, then collapse to None.
+            print(f"  HTTP Error {env['status']}: {env['url']}")
+            if env["body"] is not None:
+                snippet = str(env["body"])[:300]
+                print(f"  Response: {snippet}")
+            return None
+        return env["body"]
+
+    def get_envelope(self, collection, version, resource, params=None):
+        """
+        GET request returning a structured envelope.
+
+        Unlike ``get()`` (which returns parsed JSON on success and None on
+        any failure), this method returns a dict so callers can distinguish:
+
+          - successful empty / null responses
+          - authentication errors (401, 403)
+          - other HTTP errors (404, 5xx, ...)
+          - network failures (DNS, timeout, connection refused, ...)
+          - JSON parse failures (response was text/html instead of JSON)
+
+        Returns
+        -------
+        dict
+            {
+                "ok":         bool,        # True iff response was 2xx
+                "status":     int,         # HTTP status; 0 if no response
+                "reason":     str,         # HTTP reason phrase or
+                                           # exception class name
+                "body":       Any,         # parsed JSON if possible,
+                                           # else text, else None
+                "elapsed_ms": int,
+                "url":        str,
+                "error":      str | None,  # human-readable error if not ok
+            }
+        """
         self._throttle()
         url = f"{self.base}/{collection}/{version}/{resource}"
+        started = time.perf_counter()
+
         try:
             r = requests.get(url, headers=self.headers, params=params, timeout=30)
-            r.raise_for_status()
-            return r.json()
-        except requests.exceptions.HTTPError as e:
-            print(f"  HTTP Error {r.status_code}: {url}")
-            print(f"  Response: {r.text[:300]}")
-            return None
-        except Exception as e:
-            print(f"  Error: {e}")
-            return None
+        except requests.exceptions.RequestException as e:
+            return {
+                "ok": False,
+                "status": 0,
+                "reason": e.__class__.__name__,
+                "body": None,
+                "elapsed_ms": int((time.perf_counter() - started) * 1000),
+                "url": url,
+                "error": str(e),
+            }
+
+        elapsed_ms = int((time.perf_counter() - started) * 1000)
+
+        # Try JSON first; fall back to text; fall back to None.
+        try:
+            body = r.json()
+        except ValueError:
+            body = r.text or None
+
+        return {
+            "ok": r.ok,
+            "status": r.status_code,
+            "reason": r.reason or "",
+            "body": body,
+            "elapsed_ms": elapsed_ms,
+            "url": r.url,
+            "error": None if r.ok else f"HTTP {r.status_code} {r.reason}".strip(),
+        }
 
     def get_paginated(self, collection, version, resource, params=None, limit=100):
         """GET all pages of a paginated endpoint"""

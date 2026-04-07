@@ -34,11 +34,16 @@ class FakePlexClient:
     Drop-in replacement for plex_api.PlexClient that records calls
     and returns canned responses without ever touching the network.
 
-    Usage:
-        c = FakePlexClient()
-        c.set_response("tenants", [{"id": "...", "code": "G5"}])
-        result = c.get("mdm", "v1", "tenants")  # returns the canned response
-        assert c.calls == [("mdm", "v1", "tenants")]
+    Two parallel canned-response stores:
+      - ``set_response(resource, body)`` — body returned by both ``get()``
+        and ``get_envelope()`` (the latter wraps the body in a synthetic
+        200 OK envelope).
+      - ``set_envelope(resource, envelope)`` — full envelope dict returned
+        by ``get_envelope()`` only. Use this to test error branches like
+        401/403/network failure.
+
+    If both are set for the same resource, ``set_envelope`` wins for
+    ``get_envelope()`` calls and ``set_response`` is used for ``get()``.
     """
 
     def __init__(self, base="https://test.connect.plex.com"):
@@ -51,25 +56,52 @@ class FakePlexClient:
         }
         self.calls = []
         self._responses = {}
+        self._envelopes = {}
         self._default = None
 
     def set_response(self, resource, payload):
-        """Canned response for a specific resource string (last segment)."""
+        """Canned body for a specific resource string (last segment)."""
         self._responses[resource] = payload
 
+    def set_envelope(self, resource, envelope):
+        """Canned full envelope (overrides set_response for get_envelope)."""
+        self._envelopes[resource] = envelope
+
     def set_default(self, payload):
-        """Canned response for any resource not explicitly set."""
+        """Canned body for any resource not explicitly set."""
         self._default = payload
 
-    def get(self, collection, version, resource, params=None):
-        self.calls.append((collection, version, resource, params))
-        # Match by full resource string first, then by leading segment
+    def _lookup_body(self, resource):
         if resource in self._responses:
             return self._responses[resource]
         head = resource.split("/")[0]
         if head in self._responses:
             return self._responses[head]
         return self._default
+
+    def get(self, collection, version, resource, params=None):
+        self.calls.append((collection, version, resource, params))
+        return self._lookup_body(resource)
+
+    def get_envelope(self, collection, version, resource, params=None):
+        self.calls.append((collection, version, resource, params))
+        # Explicit envelope override wins
+        if resource in self._envelopes:
+            return self._envelopes[resource]
+        head = resource.split("/")[0]
+        if head in self._envelopes:
+            return self._envelopes[head]
+        # Otherwise synthesize a 200 OK envelope wrapping the canned body
+        body = self._lookup_body(resource)
+        return {
+            "ok": True,
+            "status": 200,
+            "reason": "OK",
+            "body": body,
+            "elapsed_ms": 0,
+            "url": f"{self.base}/{collection}/{version}/{resource}",
+            "error": None,
+        }
 
 
 @pytest.fixture
