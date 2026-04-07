@@ -275,16 +275,17 @@ https://github.com/grace-shane/plex-api/issues for live status.
 2. ~~Find the real Plex tooling endpoint~~ DONE — it's
    `inventory/v1/inventory-definitions/supply-items` with
    `category="Tools & Inserts"`. 1,109 records already exist.
-3. Read baseline tooling inventory from supply-items — issue #2.
-   Filter client-side by `category="Tools & Inserts"` since query
-   filters are mostly ignored. Save snapshot to `outputs/`.
+3. ~~Read baseline tooling inventory from supply-items~~ DONE (PR #21,
+   issue #2 closed). `extract_supply_items(client)` in plex_api.py
+   returns the filtered list and writes a CSV snapshot. Verified
+   live: 1,109 records, 30 KB response, 1.4s round trip.
 4. `build_supply_item_payload(fusion_tool: dict) -> dict` — issue #3.
    Maps Fusion tool to a supply-item POST body with
    `category="Tools & Inserts"`, `group="Machining"`,
    `supplyItemNumber=<vendor part-id>`, `description=<fusion description>`.
 5. Match-and-upsert logic by `supplyItemNumber` — issue #3.
-   Read existing supply-items, match by vendor part number, decide
-   POST (new) vs PUT (update existing).
+   Read existing supply-items via extract_supply_items(), match by
+   vendor part number, decide POST (new) vs PUT (update existing).
 6. Workcenter doc push — issue #6. Use the verified path
    `production/v1/production-definitions/workcenters/{id}` and the
    workcenterCode → Brother Speedio mapping (codes 879, 880).
@@ -292,6 +293,15 @@ https://github.com/grace-shane/plex-api/issues for live status.
 7. Core sync logic — upsert with `supplyItemNumber` dedup — issue #7.
    Dry-run by default. Real writes require `PLEX_ALLOW_WRITES=1`.
 8. Error handling + logging to network share text file — issue #8.
+
+### Architectural decisions still pending (issues #4 and #5)
+
+- **#4 — Tool Assemblies**: Plex's supply-item schema is identity-only
+  (no holder linkage). Four options listed in the issue body —
+  descope / encode in description / CSV upload / ask Plex for a
+  different product. Needs the user's call before any code work.
+- **#5 — Routing/Operation linkage**: `mdm/v1/operations` exists but
+  has no FK to tools. Same kind of decision needed as #4.
 
 ---
 
@@ -427,3 +437,75 @@ point in the project's life.
 key value (first 8 chars + length + first-source — env var or .env.local)
 is being used. We should also probably make `bootstrap.py` log when
 `.env.local` is being shadowed by an existing env var.
+
+---
+
+## Session log
+
+Reverse chronological. Each entry: what was the goal, what landed, what's left.
+
+### 2026-04-07 — full project bootstrap + Phase 3 read side
+
+**Started with:**
+- Hardcoded API key in `plex_api.py` (still in git history)
+- Old "gradient/glass dashboard" UI
+- TODO.md as the only project tracker
+- No tests, no CI, no .env.local concept
+- BRIEFING claiming tenant routing was the IT blocker
+
+**Ended with:**
+- 11 PRs merged, all via auto-merge after CI passes
+- 156 pytest tests, all green, branch protection enforces them on master
+- `.env.local` loader (`bootstrap.py`) + dev override (`run_dev.py`)
+- Production write guard (`/api/plex/raw` refuses POST/PUT/PATCH/DELETE
+  unless `PLEX_ALLOW_WRITES=1`)
+- Verified working credentials (`Fusion2Plex` Consumer Key) on
+  production with the real Grace tenant `58f781ba-...`
+- **Issue #2 closed** — `extract_supply_items()` returns 1,109
+  cutting tools and inserts from
+  `inventory/v1/inventory-definitions/supply-items` in 1.4s
+- Brother Speedio mapping verified — workcenters 879/880 = FTP IPs
+  192.168.25.79/.80
+- BRIEFING + Plex_API_Reference + TODO all rewritten to match
+  empirical reality (with the "History of incorrect hypotheses"
+  postmortem above documenting four wrong turns)
+
+**Pull requests merged this session** (newest first):
+- #22 fix: stdout UTF-8 reconfigure + ASCII arrows
+- #21 feat: extract_supply_items + Fusion testing-harness endpoints (closes #2)
+- #20 docs: Plex tooling lives in inventory/v1/inventory-definitions/supply-items
+- #19 feat: run_dev.py local launcher
+- #18 feat: migrate to PROD Plex environment + verified Grace tenant
+- #17 feat: production write guard at the proxy
+- #16 docs: correct subscription-not-tenant hypothesis (later corrected by #20)
+- #15 fix: surface HTTP errors instead of swallowing them as None
+- #14 feat: .env.local loader + Claude Preview launch config
+- #13 Endpoint tester UI, tenant diagnostics, env-var credentials, GH issue tracking
+
+**What's left to do tomorrow** (in order):
+1. **Issue #3** — `build_supply_item_payload(fusion_tool)` writing to
+   `inventory/v1/inventory-definitions/supply-items`. We have the verified
+   read path and 1,109 records to learn the schema from.
+2. **Architectural decision on issues #4 and #5** — descope or pivot.
+   Both are blocked on a real product question, not a code question.
+3. **Issue #6** — probe write support on workcenters (carefully, with
+   `PLEX_ALLOW_WRITES=1` enabled deliberately).
+4. **Issue #12** — key rotation deadline 2026-05-08.
+
+**Lessons** (additions to "History of incorrect hypotheses" if any
+session goes sideways the same way again):
+1. Never read credentials from images. Always have the user paste
+   them as text or via Insomnia "Generate Code" output.
+2. Status codes from Plex are misleading on their own. 401 means
+   "bad creds OR unsubscribed product"; 404 means "wrong URL OR
+   unsubscribed namespace". Compare across endpoints to disambiguate.
+3. Plex's URL convention is `<namespace>/v1/<namespace>-definitions/<resource>`
+   for definition data — not the bare `<namespace>/v1/<resource>` we
+   kept guessing. Tools live at `inventory/v1/inventory-definitions/supply-items`,
+   not `tooling/v1/tools` or `mdm/v1/parts`.
+4. Server-side filters on Plex endpoints are mostly silently ignored.
+   `?limit=1` on `mdm/v1/parts` returns 19.6 MB. Filter client-side.
+5. pytest's `capsys` uses UTF-8, so stdout encoding bugs only show
+   up under live Flask. Add `sys.stdout.reconfigure(encoding="utf-8")`
+   at the top of any process whose stdout might end up captured by
+   Flask request handlers on Windows.
