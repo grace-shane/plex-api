@@ -25,7 +25,7 @@ This document outlines the step-by-step implementation plan for the Autodesk Fus
 - [ ] Implement API call to create/update Tool Assemblies, assigning the purchased consumable parts to them. → [#4](https://github.com/grace-shane/plex-api/issues/4)
 - [ ] Implement API call to link Tool Assemblies to Routings/Operations. → [#5](https://github.com/grace-shane/plex-api/issues/5)
 - [ ] Implement API call to update tooling within the specific Workcenter Document (`production/v1/control/workcenters`). → [#6](https://github.com/grace-shane/plex-api/issues/6)
-- [ ] **BLOCKED**: Waiting on IT (Courtney) to complete tenant routing so credentials land on Grace Engineering instead of G5. Hypothesis: the 403s on `tooling/v1/*` endpoints will resolve once tenant access is fixed. → [#1](https://github.com/grace-shane/plex-api/issues/1)
+- [ ] **PARTIALLY BLOCKED**: New `Fusion2Plex` app from Courtney is approved for **Tooling** and **Standalone MES** API products (those endpoints now return 404 instead of 403 — auth ok). Still waiting on Courtney to also approve **Common APIs**, **Purchasing**, and **Production Control** for the same app. The earlier "tenant routing" hypothesis was wrong; this was per-product subscription all along. → [#1](https://github.com/grace-shane/plex-api/issues/1)
 
 ## Phase 4: Data Mapping & Sync Logic
 

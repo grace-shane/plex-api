@@ -40,16 +40,28 @@ The target architecture requires pushing Fusion 360 data to the Tooling/Workcent
 | Purchasing | `purchasing/v1/purchase-orders` | Returns full PO headers (e.g., tooling orders from MSC). |
 | Production | `production/v1/control/workcenters` | Discovered on Dev Portal. Replaces old 404 manufacturing endpoint. |
 
-### ⚠️ 403 Responses — Tenant Routing Suspected
+### API Product Subscription Model
 
 > [!IMPORTANT]
-> **ACTION REQUIRED**: IT (Courtney) must complete the tenant routing change so Grace Engineering credentials land on the Grace tenant (`a6af9c99-bce5-4938-a007-364dc5603d08`) instead of G5 (`b406c8c4-cef0-4d62-862c-1758b702cd02`). This is the **only** open IT blocker.
+> Plex requires each Consumer Key to be **explicitly subscribed** to API products in the developer portal before any URI under that product is reachable. An unsubscribed product returns **HTTP 401 `REQUEST_NOT_AUTHENTICATED`** at the gateway, *not* 403 — same wire response as bad credentials, which makes diagnosing this without an access matrix surprisingly hard.
 >
-> The 403s observed on the endpoints below are suspected to be tenant-scoping rather than API collection subscription. **This is a working hypothesis** — we cannot verify it until tenant access is resolved, because G5 is another company's production data and we have no authority to test writes there. Re-run `discover_all()` once tenant routing lands to confirm.
+> Verified empirically against the Grace `Fusion2Plex` app (April 2026): `tooling/v1/*` returns `404 RESOURCE_NOT_FOUND` (auth ok, just no resource at that path), while unsubscribed products like `mdm/v1/*` return `401 REQUEST_NOT_AUTHENTICATED`. The 401-vs-404 distinction is the only way to tell from outside the portal whether a product is enabled.
 
-- `tooling/v1/tools`
-- `tooling/v1/tool-assemblies`
-- `tooling/v1/tool-inventory`
+#### Current access matrix for the `Fusion2Plex` app
+
+| Path                                  | Status | Subscribed? |
+|---------------------------------------|--------|-------------|
+| `mdm/v1/tenants`                      | 401    | ❌ Common APIs not approved |
+| `mdm/v1/parts`                        | 401    | ❌ Common APIs not approved |
+| `mdm/v1/suppliers`                    | 401    | ❌ Common APIs not approved |
+| `purchasing/v1/purchase-orders`       | 401    | ❌ Purchasing not approved |
+| `production/v1/control/workcenters`   | 401    | ❌ Production Control not approved |
+| `manufacturing/v1/operations`         | 404    | ✅ Standalone MES approved |
+| `tooling/v1/tools`                    | 404    | ✅ Tooling approved |
+| `tooling/v1/tool-assemblies`          | 404    | ✅ Tooling approved |
+| `tooling/v1/tool-inventory`           | 404    | ✅ Tooling approved |
+
+**Pending IT action**: ask Courtney to also approve the `Fusion2Plex` app for **Common APIs**, **Purchasing**, and **Production Control** so we can read parts/suppliers, look up POs, and push workcenter docs.
 
 ---
 
