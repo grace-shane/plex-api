@@ -466,3 +466,44 @@ class TestFusionToolsConsumables:
             body = rv.get_json()
             assert "product_id" in body["data"][0]  # NOT product-id
             assert body["data"][0]["product_id"] == "X-1"
+
+
+# ─────────────────────────────────────────────
+# Stdout encoding regression test
+# ─────────────────────────────────────────────
+class TestStdoutEncoding:
+    """
+    Pin down the fix for the cp1252 print() bug.
+
+    Without sys.stdout.reconfigure(encoding='utf-8') at startup, any
+    print() containing a non-ASCII character (like → or —) inside a
+    Flask request handler raises UnicodeEncodeError on a Windows
+    cp1252 console and turns into a 500 from the route's exception
+    handler. The fix lives at the top of app.py.
+
+    These tests verify both the reconfigure call and that
+    plex_api.py's extract_* functions no longer print Unicode
+    arrows in their summary lines.
+    """
+
+    def test_app_module_attempts_stdout_reconfigure(self):
+        # The reconfigure call is wrapped in try/except so it can't
+        # raise even on Python builds that don't expose the method,
+        # but the call itself should be present in the source.
+        import inspect
+        src = inspect.getsource(app_module)
+        assert "sys.stdout.reconfigure" in src
+        assert 'encoding="utf-8"' in src or "encoding='utf-8'" in src
+
+    def test_no_unicode_arrows_in_plex_api_print_statements(self):
+        import plex_api
+        import inspect
+        src = inspect.getsource(plex_api)
+        # The Unicode right-arrow → (U+2192) crashes Windows cp1252.
+        # Use ASCII -> instead. This is a belt-and-suspenders check
+        # in addition to the stdout reconfigure.
+        assert "\u2192" not in src, (
+            "plex_api.py contains a Unicode arrow (U+2192) which will "
+            "raise UnicodeEncodeError on Windows cp1252 stdout. Replace "
+            "with ASCII '->'."
+        )

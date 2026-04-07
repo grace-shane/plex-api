@@ -259,7 +259,7 @@ def extract_purchase_orders(client, supplier=None, date_from=None):
     if results:
         out = os.path.join(OUTPUT_DIR, "plex_purchase_orders.csv")
         write_csv(results, out)
-        print(f"  Saved {len(results)} POs → {out}")
+        print(f"  Saved {len(results)} POs -> {out}")
     return results
 
 
@@ -278,7 +278,7 @@ def extract_parts(client, part_type=None):
     if results:
         out = os.path.join(OUTPUT_DIR, "plex_parts.csv")
         write_csv(results, out)
-        print(f"  Saved {len(results)} parts → {out}")
+        print(f"  Saved {len(results)} parts -> {out}")
     return results
 
 
@@ -293,7 +293,7 @@ def extract_workcenters(client):
     if results:
         out = os.path.join(OUTPUT_DIR, "plex_workcenters.csv")
         write_csv(results, out)
-        print(f"  Saved {len(results)} workcenters → {out}")
+        print(f"  Saved {len(results)} workcenters -> {out}")
     return results
 
 
@@ -308,7 +308,7 @@ def extract_operations(client):
     if results:
         out = os.path.join(OUTPUT_DIR, "plex_operations.csv")
         write_csv(results, out)
-        print(f"  Saved {len(results)} operations → {out}")
+        print(f"  Saved {len(results)} operations -> {out}")
     return results
 
 
@@ -378,7 +378,7 @@ def extract_supply_items(client, category=None):
     if records:
         out = os.path.join(OUTPUT_DIR, "plex_supply_items.csv")
         write_csv(records, out)
-        print(f"  Saved {len(records)} supply-items → {out}")
+        print(f"  Saved {len(records)} supply-items -> {out}")
 
     return records
 
@@ -465,7 +465,7 @@ def discover_all(client):
 
     out = os.path.join(OUTPUT_DIR, "plex_api_discovery.csv")
     write_csv(report, out)
-    print(f"\nDiscovery report saved → {out}")
+    print(f"\nDiscovery report saved -> {out}")
     return report
 
 
@@ -504,7 +504,7 @@ def explore_parts(client):
     os.makedirs(os.path.dirname(out), exist_ok=True)
     with open(out, "w", encoding="utf-8") as f:
         json.dump(data, f, indent=2)
-    print(f"\n  Full response saved → {out}")
+    print(f"\n  Full response saved -> {out}")
 
     return data
 

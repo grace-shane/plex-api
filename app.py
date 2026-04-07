@@ -1,9 +1,19 @@
 from flask import Flask, render_template, jsonify, request
 import os
+import sys
 import json
 import time
 import traceback
 import requests
+
+# Force stdout to UTF-8 so prints with non-ASCII characters (em dashes,
+# arrows, summary glyphs) don't blow up Flask request handlers on a
+# Windows cp1252 console. Without this, any print() containing → or —
+# raises UnicodeEncodeError mid-request and turns into a 500.
+try:
+    sys.stdout.reconfigure(encoding="utf-8")
+except Exception:
+    pass
 
 # Import our existing scripts
 from plex_api import (

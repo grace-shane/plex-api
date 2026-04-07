@@ -31,6 +31,14 @@ import os
 import sys
 from pathlib import Path
 
+# Force stdout to UTF-8 before importing app — same reason as in app.py:
+# Windows cp1252 console can't encode em-dashes / arrows / etc., and a
+# print() failure mid-Flask-request turns into a 500.
+try:
+    sys.stdout.reconfigure(encoding="utf-8")
+except Exception:
+    pass
+
 PROJECT_ROOT = Path(__file__).resolve().parent
 DEFAULT_ENV_FILE = PROJECT_ROOT / ".env.local"
 
