@@ -1,0 +1,134 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>plex-api · endpoint tester</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+</head>
+<body>
+    <div class="app">
+        <!-- ── LEFT RAIL ─────────────────────────────── -->
+        <aside class="rail">
+            <header class="rail-header">
+                <div class="brand">plex-api</div>
+                <div class="env-chip" id="env-chip" title="Environment">—</div>
+            </header>
+
+            <section class="rail-section">
+                <div class="rail-label">Diagnostics</div>
+                <ul class="preset-list">
+                    <li><button class="preset internal" data-internal="/api/diagnostics/tenant"><span class="m m-int">RUN</span><span class="p">tenant_whoami</span></button></li>
+                    <li><button class="preset internal" data-internal="/api/diagnostics/tenants/list"><span class="m m-int">RUN</span><span class="p">list_tenants</span></button></li>
+                </ul>
+            </section>
+
+            <section class="rail-section">
+                <div class="rail-label">Plex presets</div>
+                <ul class="preset-list" id="plex-presets">
+                    <li><button class="preset" data-method="GET" data-path="mdm/v1/parts"><span class="m m-get">GET</span><span class="p">mdm/v1/parts</span></button></li>
+                    <li><button class="preset" data-method="GET" data-path="mdm/v1/suppliers"><span class="m m-get">GET</span><span class="p">mdm/v1/suppliers</span></button></li>
+                    <li><button class="preset" data-method="GET" data-path="mdm/v1/tenants"><span class="m m-get">GET</span><span class="p">mdm/v1/tenants</span></button></li>
+                    <li><button class="preset" data-method="GET" data-path="purchasing/v1/purchase-orders"><span class="m m-get">GET</span><span class="p">purchasing/v1/purchase-orders</span></button></li>
+                    <li><button class="preset" data-method="GET" data-path="production/v1/control/workcenters"><span class="m m-get">GET</span><span class="p">production/v1/control/workcenters</span></button></li>
+                    <li><button class="preset" data-method="GET" data-path="tooling/v1/tools"><span class="m m-get">GET</span><span class="p">tooling/v1/tools</span></button></li>
+                    <li><button class="preset" data-method="GET" data-path="tooling/v1/tool-assemblies"><span class="m m-get">GET</span><span class="p">tooling/v1/tool-assemblies</span></button></li>
+                    <li><button class="preset" data-method="GET" data-path="tooling/v1/tool-inventory"><span class="m m-get">GET</span><span class="p">tooling/v1/tool-inventory</span></button></li>
+                </ul>
+            </section>
+
+            <section class="rail-section">
+                <div class="rail-label">Extractors</div>
+                <ul class="preset-list">
+                    <li><button class="preset internal" data-internal="/api/plex/discover"><span class="m m-int">RUN</span><span class="p">discover_all</span></button></li>
+                    <li><button class="preset internal" data-internal="/api/plex/parts"><span class="m m-int">RUN</span><span class="p">extract_parts</span></button></li>
+                    <li><button class="preset internal" data-internal="/api/plex/purchase_orders"><span class="m m-int">RUN</span><span class="p">extract_purchase_orders</span></button></li>
+                    <li><button class="preset internal" data-internal="/api/plex/workcenters"><span class="m m-int">RUN</span><span class="p">extract_workcenters</span></button></li>
+                </ul>
+            </section>
+
+            <section class="rail-section">
+                <div class="rail-label">Fusion 360 local</div>
+                <ul class="preset-list">
+                    <li><button class="preset internal" data-internal="/api/fusion/tools"><span class="m m-int">RUN</span><span class="p">load_all_libraries</span></button></li>
+                </ul>
+                <div class="rail-sub">
+                    <button class="btn-ghost btn-xs" id="btn-pick-files">Upload files…</button>
+                    <button class="btn-ghost btn-xs" id="btn-pick-dir">Upload folder…</button>
+                </div>
+                <input type="file" id="fusion-file-input" accept=".json" multiple hidden>
+                <input type="file" id="fusion-dir-input" webkitdirectory directory hidden>
+            </section>
+
+            <section class="rail-section rail-history">
+                <div class="rail-label">
+                    History
+                    <button class="btn-ghost btn-xs" id="btn-clear-history">clear</button>
+                </div>
+                <ul class="history-list" id="history-list">
+                    <li class="history-empty">No requests yet</li>
+                </ul>
+            </section>
+        </aside>
+
+        <!-- ── MAIN ──────────────────────────────────── -->
+        <main class="main">
+            <!-- URL bar -->
+            <div class="url-bar">
+                <select id="method" class="method-select" aria-label="HTTP method">
+                    <option value="GET">GET</option>
+                    <option value="POST">POST</option>
+                    <option value="PUT">PUT</option>
+                    <option value="PATCH">PATCH</option>
+                    <option value="DELETE">DELETE</option>
+                </select>
+                <div class="url-host" id="url-host">https://test.connect.plex.com/</div>
+                <input
+                    type="text"
+                    id="path-input"
+                    class="path-input"
+                    placeholder="mdm/v1/parts"
+                    spellcheck="false"
+                    autocomplete="off"
+                >
+                <button class="btn-primary" id="btn-send">Send</button>
+            </div>
+
+            <!-- Params -->
+            <div class="params-row">
+                <label class="params-label">Query</label>
+                <input
+                    type="text"
+                    id="params-input"
+                    class="params-input"
+                    placeholder="key=value&key2=value2"
+                    spellcheck="false"
+                    autocomplete="off"
+                >
+            </div>
+
+            <!-- Response status strip -->
+            <div class="status-strip" id="status-strip">
+                <span class="ss-idle">Ready · Ctrl+Enter to send</span>
+            </div>
+
+            <!-- Response tabs -->
+            <div class="resp-tabs">
+                <button class="tab active" data-tab="body">Body</button>
+                <button class="tab" data-tab="headers">Headers</button>
+                <button class="tab" data-tab="raw">Raw</button>
+                <div class="tab-spacer"></div>
+                <button class="btn-ghost btn-xs" id="btn-copy">Copy</button>
+                <button class="btn-ghost btn-xs" id="btn-clear">Clear</button>
+            </div>
+
+            <!-- Response body -->
+            <section class="resp-body">
+                <pre id="resp-pre" class="resp-pre">// Response will appear here</pre>
+            </section>
+        </main>
+    </div>
+
+    <script src="{{ url_for('static', filename='js/script.js') }}"></script>
+</body>
+</html>

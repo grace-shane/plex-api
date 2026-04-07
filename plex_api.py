@@ -17,11 +17,16 @@ from datetime import datetime
 # ─────────────────────────────────────────────
 # CONFIGURATION — fill these in
 # ─────────────────────────────────────────────
-API_KEY     = "k3SmLW3y3mhqJiG6osixbYUmiPsHfB51"       # from developers.plex.com → My Apps
-TENANT_ID   = "a6af9c99-bce5-4938-a007-364dc5603d08"                             # leave blank for default tenant (your PCN)
+# Credentials come from environment variables — never hardcode/commit.
+#   PLEX_API_KEY     — Consumer Key from developers.plex.com → My Apps
+#   PLEX_API_SECRET  — Consumer Secret, paired with the key
+API_KEY     = os.environ.get("PLEX_API_KEY", "")
+API_SECRET  = os.environ.get("PLEX_API_SECRET", "")
+# Tenant IDs are not secrets — safe to commit. G5 is what we currently have access to.
+TENANT_ID   = "b406c8c4-cef0-4d62-862c-1758b702cd02"  # G5 (read-only) — Grace UUID = a6af9c99-bce5-4938-a007-364dc5603d08
 BASE_URL    = "https://connect.plex.com"
 TEST_URL    = "https://test.connect.plex.com"
-USE_TEST    = False                          # flip to True to hit test environment first
+USE_TEST    = True                           # all dev work goes against test.connect.plex.com
 
 OUTPUT_DIR   = "C:/projects/plex-api/outputs"
 TOOL_LIB_DIR = "Z:\\Engineering\\Tooling\\Fusion_Libraries"  # Mapped drive path containing JSON files
@@ -30,13 +35,15 @@ TOOL_LIB_DIR = "Z:\\Engineering\\Tooling\\Fusion_Libraries"  # Mapped drive path
 # BASE CLIENT
 # ─────────────────────────────────────────────
 class PlexClient:
-    def __init__(self, api_key, tenant_id="", use_test=False):
+    def __init__(self, api_key, api_secret="", tenant_id="", use_test=False):
         self.base = TEST_URL if use_test else BASE_URL
         self.headers = {
             "X-Plex-Connect-Api-Key": api_key,
             "Content-Type": "application/json",
             "Accept": "application/json",
         }
+        if api_secret:
+            self.headers["X-Plex-Connect-Api-Secret"] = api_secret
         if tenant_id:
             self.headers["X-Plex-Connect-Tenant-Id"] = tenant_id
 
@@ -271,18 +278,18 @@ def discover_all(client):
             status = r.status_code
             note = ""
             if status == 200:
-                note = "✅ Available"
+                note = "[OK] Available"
             elif status == 401:
-                note = "❌ Auth error"
+                note = "[ERR] Auth error"
             elif status == 403:
-                note = "🔒 Not subscribed"
+                note = "[LOCK] Not subscribed"
             elif status == 404:
-                note = "❓ Not found"
+                note = "[?] Not found"
             else:
-                note = f"⚠️  HTTP {status}"
+                note = f"[!] HTTP {status}"
         except Exception as e:
             status = 0
-            note = f"❌ Exception: {e}"
+            note = f"[ERR] Exception: {e}"
 
         print(f"  {note:25s} {collection}/{version}/{resource}")
         report.append({
@@ -341,8 +348,14 @@ def explore_parts(client):
 
 
 if __name__ == "__main__":
+    if not API_KEY or not API_SECRET:
+        raise SystemExit(
+            "Missing credentials. Set PLEX_API_KEY and PLEX_API_SECRET environment variables."
+        )
+
     client = PlexClient(
         api_key=API_KEY,
+        api_secret=API_SECRET,
         tenant_id=TENANT_ID,
         use_test=USE_TEST,
     )

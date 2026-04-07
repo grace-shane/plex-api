@@ -2,6 +2,9 @@
 
 This document outlines the step-by-step implementation plan for the Autodesk Fusion 360 tool library to Plex Manufacturing Cloud synchronization project.
 
+> **Live tracking:** All unchecked items below are mirrored as GitHub Issues.
+> See <https://github.com/grace-shane/plex-api/issues> for current status, comments, and blockers.
+
 ## Phase 1: API Discovery & Authentication
 
 - [x] Set up Postman and discover relevant Plex API endpoints.
@@ -17,26 +20,27 @@ This document outlines the step-by-step implementation plan for the Autodesk Fus
 
 ## Phase 3: Plex API Source-of-Truth Implementation
 
-- [ ] Implement API call to retrieve current tooling inventory from Plex (master list) to prep for overwrite.
-- [ ] Implement API call to update/create purchased parts (focused first on **consumables** like cutting tools) in Plex.
-- [ ] Implement API call to create/update Tool Assemblies, assigning the purchased consumable parts to them.
-- [ ] Implement API call to link Tool Assemblies to Routings/Operations.
-- [ ] Implement API call to update tooling within the specific Workcenter Document (`production/v1/control/workcenters`).
-- [ ] **BLOCKED**: Waiting on IT (Courtney) to enable Tooling & Manufacturing APIs in the Developer Portal.
+- [ ] Implement API call to retrieve current tooling inventory from Plex (master list) to prep for overwrite. → [#2](https://github.com/grace-shane/plex-api/issues/2)
+- [ ] Implement API call to update/create purchased parts (focused first on **consumables** like cutting tools) in Plex. → [#3](https://github.com/grace-shane/plex-api/issues/3)
+- [ ] Implement API call to create/update Tool Assemblies, assigning the purchased consumable parts to them. → [#4](https://github.com/grace-shane/plex-api/issues/4)
+- [ ] Implement API call to link Tool Assemblies to Routings/Operations. → [#5](https://github.com/grace-shane/plex-api/issues/5)
+- [ ] Implement API call to update tooling within the specific Workcenter Document (`production/v1/control/workcenters`). → [#6](https://github.com/grace-shane/plex-api/issues/6)
+- [ ] **BLOCKED**: Waiting on IT (Courtney) to complete tenant routing so credentials land on Grace Engineering instead of G5. Hypothesis: the 403s on `tooling/v1/*` endpoints will resolve once tenant access is fixed. → [#1](https://github.com/grace-shane/plex-api/issues/1)
 
 ## Phase 4: Data Mapping & Sync Logic
 
 - [x] Create a mapping definition between Fusion 360 data structures and Plex API payload requirements (Completed in `Fusion360_Tool_Library_Reference.md`).
-- [ ] Implement the core synchronization logic:
+- [ ] Implement the core synchronization logic: → [#7](https://github.com/grace-shane/plex-api/issues/7)
   - Utilize the Fusion JSON file output as the explicit Source of Truth relative to Plex.
   - Push updates for purchased consumables to the master inventory list.
   - Link those consumables into Tool Assemblies.
   - Ensure those assemblies dynamically flow down to the Routing and then the Job when run in the shop, linking tools directly to manufactured parts.
   - Push final setups to the workcenter documents.
-- [ ] Add basic error handling and logging (e.g., logging successful syncs or failed API calls to a text file on the network share).
+- [ ] Add basic error handling and logging (e.g., logging successful syncs or failed API calls to a text file on the network share). → [#8](https://github.com/grace-shane/plex-api/issues/8)
 
 ## Phase 5: Automation & Deployment
 
-- [ ] Finalize the synchronization script.
-- [ ] Deploy the script to a server or always-on PC with access to the network share.
-- [ ] Schedule the script to run daily at midnight (e.g., using Windows Task Scheduler).
+- [ ] Finalize the synchronization script. → [#9](https://github.com/grace-shane/plex-api/issues/9)
+- [ ] Deploy the script to a server or always-on PC with access to the network share. → [#10](https://github.com/grace-shane/plex-api/issues/10)
+- [ ] Schedule the script to run daily at midnight (e.g., using Windows Task Scheduler). → [#11](https://github.com/grace-shane/plex-api/issues/11)
+- [ ] Rotate the Plex API key before production (previous key is still in git history). → [#12](https://github.com/grace-shane/plex-api/issues/12)

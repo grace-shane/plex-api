@@ -40,10 +40,12 @@ The target architecture requires pushing Fusion 360 data to the Tooling/Workcent
 | Purchasing | `purchasing/v1/purchase-orders` | Returns full PO headers (e.g., tooling orders from MSC). |
 | Production | `production/v1/control/workcenters` | Discovered on Dev Portal. Replaces old 404 manufacturing endpoint. |
 
-### ⚠️ Blocked Endpoints (Action Required)
->
+### ⚠️ 403 Responses — Tenant Routing Suspected
+
 > [!IMPORTANT]
-> **ACTION REQUIRED**: IT (Courtney) must enable the **Tooling** and **Manufacturing** API collections for the currently active App in the Plex Developer Portal. Initial testing returned 403 authorization failures. The Tooling endpoint documentation remains completely hidden from the public developer portal until you authenticate with a subscribed developer account.
+> **ACTION REQUIRED**: IT (Courtney) must complete the tenant routing change so Grace Engineering credentials land on the Grace tenant (`a6af9c99-bce5-4938-a007-364dc5603d08`) instead of G5 (`b406c8c4-cef0-4d62-862c-1758b702cd02`). This is the **only** open IT blocker.
+>
+> The 403s observed on the endpoints below are suspected to be tenant-scoping rather than API collection subscription. **This is a working hypothesis** — we cannot verify it until tenant access is resolved, because G5 is another company's production data and we have no authority to test writes there. Re-run `discover_all()` once tenant routing lands to confirm.
 
 - `tooling/v1/tools`
 - `tooling/v1/tool-assemblies`
