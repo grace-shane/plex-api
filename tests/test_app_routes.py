@@ -201,3 +201,162 @@ class TestDiscover:
             body = rv.get_json()
             assert body["status"] == "success"
             assert body["data"] == [{"endpoint": "x", "status": 200}]
+
+
+# ─────────────────────────────────────────────
+# Production write guard
+# ─────────────────────────────────────────────
+class TestProductionWriteGuard:
+    """
+    The /api/plex/raw proxy must refuse mutating methods (POST/PUT/PATCH/
+    DELETE) when running against a production Plex environment unless
+    PLEX_ALLOW_WRITES is explicitly enabled.
+
+    These tests temporarily flip the module-level IS_PRODUCTION and
+    WRITES_ALLOWED constants since they're computed at import time from
+    env vars (which conftest.py has already locked in).
+    """
+
+    def test_get_always_allowed_in_production(self, client, monkeypatch):
+        monkeypatch.setattr(app_module, "IS_PRODUCTION", True)
+        monkeypatch.setattr(app_module, "WRITES_ALLOWED", False)
+
+        mock_response = MagicMock()
+        mock_response.status_code = 200
+        mock_response.reason = "OK"
+        mock_response.ok = True
+        mock_response.content = b"{}"
+        mock_response.json.return_value = {}
+        mock_response.headers = {}
+        mock_response.url = "https://connect.plex.com/mdm/v1/tenants"
+
+        with patch.object(app_module.requests, "request", return_value=mock_response):
+            rv = client.get("/api/plex/raw?path=mdm/v1/tenants")
+            assert rv.status_code == 200
+            assert rv.get_json()["status"] == "success"
+
+    def test_post_blocked_in_production_without_writes_allowed(self, client, monkeypatch):
+        monkeypatch.setattr(app_module, "IS_PRODUCTION", True)
+        monkeypatch.setattr(app_module, "WRITES_ALLOWED", False)
+
+        rv = client.post("/api/plex/raw?path=mdm/v1/parts", json={"foo": "bar"})
+        assert rv.status_code == 403
+        body = rv.get_json()
+        assert body["status"] == "error"
+        assert body["guard"] == "PLEX_ALLOW_WRITES"
+        assert body["is_production"] is True
+        assert body["writes_allowed"] is False
+        assert "PLEX_ALLOW_WRITES" in body["message"]
+        assert "POST" in body["message"]
+
+    def test_put_blocked_in_production_without_writes_allowed(self, client, monkeypatch):
+        monkeypatch.setattr(app_module, "IS_PRODUCTION", True)
+        monkeypatch.setattr(app_module, "WRITES_ALLOWED", False)
+
+        rv = client.put("/api/plex/raw?path=mdm/v1/parts/x", json={"foo": "bar"})
+        assert rv.status_code == 403
+        assert rv.get_json()["guard"] == "PLEX_ALLOW_WRITES"
+
+    def test_patch_blocked_in_production_without_writes_allowed(self, client, monkeypatch):
+        monkeypatch.setattr(app_module, "IS_PRODUCTION", True)
+        monkeypatch.setattr(app_module, "WRITES_ALLOWED", False)
+
+        rv = client.patch("/api/plex/raw?path=mdm/v1/parts/x", json={"foo": "bar"})
+        assert rv.status_code == 403
+
+    def test_delete_blocked_in_production_without_writes_allowed(self, client, monkeypatch):
+        monkeypatch.setattr(app_module, "IS_PRODUCTION", True)
+        monkeypatch.setattr(app_module, "WRITES_ALLOWED", False)
+
+        rv = client.delete("/api/plex/raw?path=mdm/v1/parts/x")
+        assert rv.status_code == 403
+
+    def test_post_allowed_in_production_when_writes_enabled(self, client, monkeypatch):
+        monkeypatch.setattr(app_module, "IS_PRODUCTION", True)
+        monkeypatch.setattr(app_module, "WRITES_ALLOWED", True)
+
+        mock_response = MagicMock()
+        mock_response.status_code = 201
+        mock_response.reason = "Created"
+        mock_response.ok = True
+        mock_response.content = b'{"id":"new"}'
+        mock_response.json.return_value = {"id": "new"}
+        mock_response.headers = {}
+        mock_response.url = "https://connect.plex.com/mdm/v1/parts"
+
+        with patch.object(app_module.requests, "request", return_value=mock_response):
+            rv = client.post("/api/plex/raw?path=mdm/v1/parts", json={"foo": "bar"})
+            assert rv.status_code == 200  # envelope is 200; inner http_status is 201
+            body = rv.get_json()
+            assert body["status"] == "success"
+            assert body["http_status"] == 201
+
+    def test_post_allowed_in_test_environment_regardless(self, client, monkeypatch):
+        monkeypatch.setattr(app_module, "IS_PRODUCTION", False)
+        monkeypatch.setattr(app_module, "WRITES_ALLOWED", False)
+
+        mock_response = MagicMock()
+        mock_response.status_code = 200
+        mock_response.reason = "OK"
+        mock_response.ok = True
+        mock_response.content = b"{}"
+        mock_response.json.return_value = {}
+        mock_response.headers = {}
+        mock_response.url = "https://test.connect.plex.com/mdm/v1/parts"
+
+        with patch.object(app_module.requests, "request", return_value=mock_response):
+            rv = client.post("/api/plex/raw?path=mdm/v1/parts", json={"foo": "bar"})
+            assert rv.status_code == 200
+
+    def test_config_endpoint_exposes_guard_state(self, client):
+        rv = client.get("/api/config")
+        body = rv.get_json()
+        assert "is_production" in body
+        assert "writes_allowed" in body
+        assert isinstance(body["is_production"], bool)
+        assert isinstance(body["writes_allowed"], bool)
+
+
+# ─────────────────────────────────────────────
+# Helper function _is_write_blocked
+# ─────────────────────────────────────────────
+class TestIsWriteBlocked:
+    def test_get_never_blocked_in_production(self, monkeypatch):
+        monkeypatch.setattr(app_module, "IS_PRODUCTION", True)
+        monkeypatch.setattr(app_module, "WRITES_ALLOWED", False)
+        blocked, reason = app_module._is_write_blocked("GET")
+        assert blocked is False
+        assert reason == ""
+
+    def test_get_never_blocked_in_test(self, monkeypatch):
+        monkeypatch.setattr(app_module, "IS_PRODUCTION", False)
+        monkeypatch.setattr(app_module, "WRITES_ALLOWED", False)
+        blocked, reason = app_module._is_write_blocked("GET")
+        assert blocked is False
+
+    def test_post_blocked_in_production_default(self, monkeypatch):
+        monkeypatch.setattr(app_module, "IS_PRODUCTION", True)
+        monkeypatch.setattr(app_module, "WRITES_ALLOWED", False)
+        blocked, reason = app_module._is_write_blocked("POST")
+        assert blocked is True
+        assert "PLEX_ALLOW_WRITES" in reason
+
+    def test_post_unblocked_in_test(self, monkeypatch):
+        monkeypatch.setattr(app_module, "IS_PRODUCTION", False)
+        monkeypatch.setattr(app_module, "WRITES_ALLOWED", False)
+        blocked, reason = app_module._is_write_blocked("POST")
+        assert blocked is False
+
+    def test_post_unblocked_when_writes_enabled(self, monkeypatch):
+        monkeypatch.setattr(app_module, "IS_PRODUCTION", True)
+        monkeypatch.setattr(app_module, "WRITES_ALLOWED", True)
+        blocked, reason = app_module._is_write_blocked("POST")
+        assert blocked is False
+
+    def test_method_case_insensitive(self, monkeypatch):
+        monkeypatch.setattr(app_module, "IS_PRODUCTION", True)
+        monkeypatch.setattr(app_module, "WRITES_ALLOWED", False)
+        blocked, _ = app_module._is_write_blocked("post")
+        assert blocked is True
+        blocked, _ = app_module._is_write_blocked("Delete")
+        assert blocked is True

@@ -31,6 +31,47 @@ client = PlexClient(
     use_test=USE_TEST,
 )
 
+# ─────────────────────────────────────────────
+# Production write guard
+# ─────────────────────────────────────────────
+# Read-only methods are always allowed. Mutating methods (POST/PUT/PATCH/
+# DELETE) are blocked when running against a non-test Plex environment
+# (connect.plex.com), unless the operator explicitly opts in by setting
+# PLEX_ALLOW_WRITES=1 in the environment.
+#
+# This guard exists because the Fusion2Plex app currently has read access
+# to real Grace Engineering production data. A casual write — even one
+# triggered by a stray click in the UI — could affect actual manufacturing
+# operations.
+#
+# To enable writes:
+#   $env:PLEX_ALLOW_WRITES = "1"     # PowerShell
+#   export PLEX_ALLOW_WRITES=1        # bash
+# Then restart the server. The /api/config endpoint will reflect the change.
+WRITES_ALLOWED = os.environ.get("PLEX_ALLOW_WRITES", "").strip().lower() in (
+    "1", "true", "yes", "on", "enabled",
+)
+IS_PRODUCTION = "test." not in client.base
+WRITE_METHODS = {"POST", "PUT", "PATCH", "DELETE"}
+
+
+def _is_write_blocked(method: str) -> tuple[bool, str]:
+    """
+    Returns (blocked, reason). True if a write request should be refused.
+    """
+    if method.upper() not in WRITE_METHODS:
+        return False, ""
+    if not IS_PRODUCTION:
+        return False, ""
+    if WRITES_ALLOWED:
+        return False, ""
+    return True, (
+        f"Write blocked: {method} requests to {client.base} are refused "
+        f"because the server is running against a production Plex environment "
+        f"and PLEX_ALLOW_WRITES is not set. To enable writes, set "
+        f"PLEX_ALLOW_WRITES=1 in the environment and restart the server."
+    )
+
 
 @app.route('/')
 def index():
@@ -62,11 +103,26 @@ def api_plex_raw():
             "message": "Missing required 'path' query param (e.g. mdm/v1/parts)",
         }), 400
 
+    method = request.method.upper()
+
+    # Production write guard — refuse mutating methods unless explicitly enabled
+    blocked, reason = _is_write_blocked(method)
+    if blocked:
+        return jsonify({
+            "status": "error",
+            "http_status": 0,
+            "method": method,
+            "url": f"{client.base}/{path}",
+            "message": reason,
+            "guard": "PLEX_ALLOW_WRITES",
+            "is_production": IS_PRODUCTION,
+            "writes_allowed": WRITES_ALLOWED,
+        }), 403
+
     # Forward all query params EXCEPT our own 'path' marker.
     forwarded_params = {k: v for k, v in request.args.items() if k != 'path'}
 
     url = f"{client.base}/{path}"
-    method = request.method.upper()
 
     body = None
     if method in ('POST', 'PUT', 'PATCH'):
@@ -229,6 +285,8 @@ def api_config():
     return jsonify({
         "base_url": client.base,
         "environment": "test" if USE_TEST else "production",
+        "is_production": IS_PRODUCTION,
+        "writes_allowed": WRITES_ALLOWED,
         "tenant_id": TENANT_ID,
         "has_key": bool(API_KEY),
         "has_secret": bool(API_SECRET),
@@ -236,6 +294,20 @@ def api_config():
 
 
 if __name__ == '__main__':
-    # Run the server on port 5000
+    # Loud startup banner if we're connected to a production environment
+    if IS_PRODUCTION:
+        print()
+        print("=" * 70)
+        print(f"  WARNING: Connected to PRODUCTION Plex environment")
+        print(f"           {client.base}")
+        if WRITES_ALLOWED:
+            print(f"  WRITES ARE ENABLED via PLEX_ALLOW_WRITES")
+            print(f"  Every POST/PUT/PATCH/DELETE will hit real production data.")
+        else:
+            print(f"  Writes are BLOCKED at the proxy. To enable, set")
+            print(f"  PLEX_ALLOW_WRITES=1 in the environment and restart.")
+        print("=" * 70)
+        print()
+
     print("Starting UX Test Server...")
     app.run(debug=True, host='0.0.0.0', port=5000)
