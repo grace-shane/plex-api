@@ -11,9 +11,8 @@ This document outlines the step-by-step implementation plan for the Autodesk Fus
 
 ## Phase 2: Local Data Reading & Parsing
 
-- [x] Decide on the permanent file path strategy: Use a mapped network drive for exported copies of the Fusion 360 tool library JSON files (protects production libraries and simplifies automation).
-- [ ] Map the network drive (e.g., `Z:\...`) and populate it with the exported JSON files.
-- [ ] Write a script to consistently read the JSON files from the mapped network drive (Fusion files are the absolute Source of Truth).
+- [x] Identify the permanent network share path for the Fusion 360 tool library JSON files.
+- [x] Write a script to consistently read the JSON files from the network share (Fusion files are the absolute Source of Truth).
 - [x] Parse the Fusion 360 JSON schema to identify key tooling attributes (Completed in `Fusion360_Tool_Library_Reference.md`).
 
 ## Phase 3: Plex API Source-of-Truth Implementation

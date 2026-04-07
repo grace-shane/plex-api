@@ -18,7 +18,7 @@ from datetime import datetime
 # CONFIGURATION — fill these in
 # ─────────────────────────────────────────────
 API_KEY     = "k3SmLW3y3mhqJiG6osixbYUmiPsHfB51"       # from developers.plex.com → My Apps
-TENANT_ID   = ""                             # leave blank for default tenant (your PCN)
+TENANT_ID   = "a6af9c99-bce5-4938-a007-364dc5603d08"                             # leave blank for default tenant (your PCN)
 BASE_URL    = "https://connect.plex.com"
 TEST_URL    = "https://test.connect.plex.com"
 USE_TEST    = False                          # flip to True to hit test environment first
