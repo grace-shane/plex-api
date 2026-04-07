@@ -122,11 +122,20 @@ Sync filter: include only type != "holder" AND type != "probe"
 
 ### plex_api.py
 - PlexClient base class with throttling (200 calls/min rate limit)
+- Constructor takes api_key, api_secret, tenant_id, use_test
+- Sets X-Plex-Connect-Api-Key, X-Plex-Connect-Api-Secret, and
+  X-Plex-Connect-Tenant-Id headers
+- Credentials read from PLEX_API_KEY / PLEX_API_SECRET env vars
 - get() and get_paginated() methods
 - Extraction functions: extract_purchase_orders, extract_parts, extract_workcenters
 - discover_all() endpoint probe utility
-- **NEEDS UPDATE**: PlexClient constructor is missing api_secret parameter
-  and X-Plex-Connect-Api-Secret header — fix this before any further work
+
+### plex_diagnostics.py
+- list_tenants(client) — GET /mdm/v1/tenants
+- get_tenant(client, id) — GET /mdm/v1/tenants/{id}
+- tenant_whoami(client, configured_id) — composite check that compares
+  visible tenants against the known Grace and G5 UUIDs and returns a
+  structured report. Run this first to verify tenant routing.
 
 ### tool_library_loader.py
 - load_library(path) — loads single .json, returns data array
@@ -135,32 +144,52 @@ Sync filter: include only type != "holder" AND type != "probe"
 - PermissionError and JSONDecodeError handling (ADC mid-sync file locks)
 - report_library_contents() — diagnostic summary
 
+### app.py + templates/static
+- Flask endpoint tester UI at http://localhost:5000
+- Left rail: Diagnostics (run first), Plex presets, Extractors, Fusion local
+- Top: method selector + URL bar + query params + Send (Ctrl/Cmd+Enter)
+- Tabbed response pane (Body / Headers / Raw), copy and clear, history
+- /api/plex/raw proxy lets the UI hit any Plex endpoint via PlexClient
+  without exposing credentials to the browser
+- /api/diagnostics/tenant runs tenant_whoami from plex_diagnostics
+
 ---
 
 ## Immediate TODO (in priority order)
 
-1. Fix PlexClient constructor — add api_secret, include header
-2. build_part_payload(tool: dict) -> dict
+All items below are mirrored as GitHub Issues — see
+https://github.com/grace-shane/plex-api/issues for live status.
+
+1. ~~Fix PlexClient constructor — add api_secret, include header~~ DONE
+2. Read baseline tooling inventory from mdm/v1/parts — issue #2 (unblocked,
+   read-only — can start today on G5)
+3. build_part_payload(tool: dict) -> dict — issue #3
    Maps Fusion tool object to mdm/v1/parts POST body
-3. resolve_supplier_uuid(vendor_name: str) -> str
-   Looks up supplier UUID from mdm/v1/suppliers — safe to test on G5 (read-only)
-4. build_assembly_payload(tool: dict, holder: dict) -> dict
-   Stub only — tooling endpoints blocked, but payload shape can be drafted
-5. Core sync logic — upsert with guid-based dedup
-6. Error handling + logging to network share text file
+4. resolve_supplier_uuid(vendor_name: str) -> str — issue #3
+   Looks up supplier UUID from mdm/v1/suppliers (safe to test on G5 read)
+5. build_assembly_payload(tool: dict, holder: dict) -> dict — issue #4
+   Draft only — endpoints currently 403 (suspected tenant scoping)
+6. Core sync logic — upsert with guid-based dedup — issue #7
+7. Error handling + logging to network share text file — issue #8
 
 ---
 
 ## Gotchas — read before touching anything
 
 - **G5 is production data. Read only. No writes, no mutations.**
-- PlexClient missing api_secret — fix before running anything
+- PLEX_API_KEY and PLEX_API_SECRET must be set in the environment before
+  running plex_api.py or app.py — both will hard-fail with a clear message
+  if they are missing
+- The previously hardcoded API key (k3SmLW3y…) is still in git history on
+  master and must be rotated before production deployment — see issue #12
 - mdm/v1/parts has NO server-side pagination — unfiltered = entire DB pulled
 - supplierId in responses is a UUID, not a supplier code (MSC != "MSC001")
 - URL-encode spaces in filter strings (MRO SUPPLIES -> MRO%20SUPPLIES)
 - API key must be in header — URL parameter returns 401
 - PowerShell: use Invoke-RestMethod, not curl (alias doesn't pass headers)
-- Tooling 403s look like 404s — it's a subscription issue, not missing endpoints
+- Tooling 403s on tooling/v1/* are SUSPECTED to be tenant scoping, not API
+  collection subscription. Working hypothesis only — cannot verify until
+  tenant routing lands. See issue #1.
 - Fusion Tool objects from CAM API are copies, not references
 - ADC stale file guard will abort sync if network share files are > 25h old
 - BROTHER SPEEDIO ALUMINUM.json is committed to repo for reference only —
