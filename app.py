@@ -19,6 +19,7 @@ from plex_api import (
     extract_operations,
 )
 from tool_library_loader import load_all_libraries
+from plex_diagnostics import tenant_whoami, list_tenants, get_tenant
 
 app = Flask(__name__)
 
@@ -118,6 +119,45 @@ def api_discover():
     try:
         report = discover_all(client)
         return jsonify({"status": "success", "data": report})
+    except Exception as e:
+        return jsonify({"status": "error", "message": str(e), "trace": traceback.format_exc()}), 500
+
+
+# ─────────────────────────────────────────────
+# Diagnostics — read-only sanity checks
+# ─────────────────────────────────────────────
+@app.route('/api/diagnostics/tenant')
+def api_diagnostics_tenant():
+    """
+    Composite tenant diagnostic.
+
+    Calls /mdm/v1/tenants and (if a TENANT_ID is configured) /mdm/v1/tenants/{id},
+    then compares the result against the known Grace and G5 UUIDs so the UI can
+    show a clear "is this the right tenant?" status. Read-only and safe.
+    """
+    try:
+        report = tenant_whoami(client, TENANT_ID)
+        return jsonify({"status": "success", "data": report})
+    except Exception as e:
+        return jsonify({"status": "error", "message": str(e), "trace": traceback.format_exc()}), 500
+
+
+@app.route('/api/diagnostics/tenants/list')
+def api_diagnostics_tenants_list():
+    """Raw GET /mdm/v1/tenants — list all tenants visible to the credential."""
+    try:
+        data = list_tenants(client)
+        return jsonify({"status": "success", "data": data})
+    except Exception as e:
+        return jsonify({"status": "error", "message": str(e), "trace": traceback.format_exc()}), 500
+
+
+@app.route('/api/diagnostics/tenants/<tenant_id>')
+def api_diagnostics_tenant_get(tenant_id):
+    """Raw GET /mdm/v1/tenants/{id} — fetch a single tenant by UUID."""
+    try:
+        data = get_tenant(client, tenant_id)
+        return jsonify({"status": "success", "data": data})
     except Exception as e:
         return jsonify({"status": "error", "message": str(e), "trace": traceback.format_exc()}), 500
 

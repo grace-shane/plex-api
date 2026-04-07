@@ -16,6 +16,14 @@
             </header>
 
             <section class="rail-section">
+                <div class="rail-label">Diagnostics</div>
+                <ul class="preset-list">
+                    <li><button class="preset internal" data-internal="/api/diagnostics/tenant"><span class="m m-int">RUN</span><span class="p">tenant_whoami</span></button></li>
+                    <li><button class="preset internal" data-internal="/api/diagnostics/tenants/list"><span class="m m-int">RUN</span><span class="p">list_tenants</span></button></li>
+                </ul>
+            </section>
+
+            <section class="rail-section">
                 <div class="rail-label">Plex presets</div>
                 <ul class="preset-list" id="plex-presets">
                     <li><button class="preset" data-method="GET" data-path="mdm/v1/parts"><span class="m m-get">GET</span><span class="p">mdm/v1/parts</span></button></li>
