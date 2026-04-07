@@ -3,88 +3,124 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Tooling Sync | Admin Dashboard</title>
-    <!-- Google Fonts -->
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
-    <!-- Local CSS -->
+    <title>plex-api · endpoint tester</title>
     <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
 </head>
 <body>
-    
-    <div class="dashboard-wrapper">
-        <!-- Sidebar Navigation -->
-        <aside class="sidebar glass-panel">
-            <div class="sidebar-header">
-                <h2>Sync Dashboard</h2>
-                <span class="badge">v1.2</span>
-            </div>
-            
-            <nav class="action-nav">
-                <div class="nav-group">
-                    <h3>Plex Cloud API</h3>
-                    <button class="action-btn" data-endpoint="/api/plex/discover" data-name="API Discovery">
-                        <span class="btn-icon">🔍</span> Probe Endpoints
-                    </button>
-                    <button class="action-btn" data-endpoint="/api/plex/parts" data-name="Plex Parts">
-                        <span class="btn-icon">⚙️</span> Extract Parts
-                    </button>
-                    <button class="action-btn" data-endpoint="/api/plex/purchase_orders" data-name="Purchase Orders">
-                        <span class="btn-icon">📦</span> Extract POs
-                    </button>
-                    <button class="action-btn" data-endpoint="/api/plex/operations" data-name="Operations">
-                        <span class="btn-icon">📋</span> Extract Operations
-                    </button>
-                </div>
-
-                <div class="nav-group mt-2">
-                    <h3>Fusion 360 Local Data</h3>
-                    <button class="action-btn accent-btn" data-endpoint="/api/fusion/tools" data-name="Fusion Tool Libraries">
-                        <span class="btn-icon">⚡</span> Sync Default Path
-                    </button>
-                    
-                    <div style="display:flex; gap:0.5rem; margin-top: 0.5rem;">
-                        <button class="ghost-btn btn-sm" id="btn-pick-files" style="flex:1;">📁 File(s)</button>
-                        <button class="ghost-btn btn-sm" id="btn-pick-dir" style="flex:1;">📂 Folder</button>
-                    </div>
-
-                    <input type="file" id="fusion-file-input" accept=".json" multiple class="hidden">
-                    <input type="file" id="fusion-dir-input" webkitdirectory directory class="hidden">
-                </div>
-            </nav>
-        </aside>
-
-        <!-- Main Display Content -->
-        <main class="main-content">
-            <header class="top-bar glass-panel">
-                <div class="status-indicator">
-                    <span class="pulse-dot"></span> System Online
-                </div>
-                <!-- Dynamic Title -->
-                <h1 id="view-title">Welcome to Tooling Sync</h1>
+    <div class="app">
+        <!-- ── LEFT RAIL ─────────────────────────────── -->
+        <aside class="rail">
+            <header class="rail-header">
+                <div class="brand">plex-api</div>
+                <div class="env-chip" id="env-chip" title="Environment">—</div>
             </header>
 
-            <section class="data-view glass-panel">
-                <div id="loading-overlay" class="hidden">
-                    <div class="spinner"></div>
-                    <p>Executing Request...</p>
+            <section class="rail-section">
+                <div class="rail-label">Plex presets</div>
+                <ul class="preset-list" id="plex-presets">
+                    <li><button class="preset" data-method="GET" data-path="mdm/v1/parts"><span class="m m-get">GET</span><span class="p">mdm/v1/parts</span></button></li>
+                    <li><button class="preset" data-method="GET" data-path="mdm/v1/suppliers"><span class="m m-get">GET</span><span class="p">mdm/v1/suppliers</span></button></li>
+                    <li><button class="preset" data-method="GET" data-path="mdm/v1/tenants"><span class="m m-get">GET</span><span class="p">mdm/v1/tenants</span></button></li>
+                    <li><button class="preset" data-method="GET" data-path="purchasing/v1/purchase-orders"><span class="m m-get">GET</span><span class="p">purchasing/v1/purchase-orders</span></button></li>
+                    <li><button class="preset" data-method="GET" data-path="production/v1/control/workcenters"><span class="m m-get">GET</span><span class="p">production/v1/control/workcenters</span></button></li>
+                    <li><button class="preset" data-method="GET" data-path="tooling/v1/tools"><span class="m m-get">GET</span><span class="p">tooling/v1/tools</span><span class="tag">403</span></button></li>
+                    <li><button class="preset" data-method="GET" data-path="tooling/v1/tool-assemblies"><span class="m m-get">GET</span><span class="p">tooling/v1/tool-assemblies</span><span class="tag">403</span></button></li>
+                    <li><button class="preset" data-method="GET" data-path="tooling/v1/tool-inventory"><span class="m m-get">GET</span><span class="p">tooling/v1/tool-inventory</span><span class="tag">403</span></button></li>
+                </ul>
+            </section>
+
+            <section class="rail-section">
+                <div class="rail-label">Extractors</div>
+                <ul class="preset-list">
+                    <li><button class="preset internal" data-internal="/api/plex/discover"><span class="m m-int">RUN</span><span class="p">discover_all</span></button></li>
+                    <li><button class="preset internal" data-internal="/api/plex/parts"><span class="m m-int">RUN</span><span class="p">extract_parts</span></button></li>
+                    <li><button class="preset internal" data-internal="/api/plex/purchase_orders"><span class="m m-int">RUN</span><span class="p">extract_purchase_orders</span></button></li>
+                    <li><button class="preset internal" data-internal="/api/plex/workcenters"><span class="m m-int">RUN</span><span class="p">extract_workcenters</span></button></li>
+                </ul>
+            </section>
+
+            <section class="rail-section">
+                <div class="rail-label">Fusion 360 local</div>
+                <ul class="preset-list">
+                    <li><button class="preset internal" data-internal="/api/fusion/tools"><span class="m m-int">RUN</span><span class="p">load_all_libraries</span></button></li>
+                </ul>
+                <div class="rail-sub">
+                    <button class="btn-ghost btn-xs" id="btn-pick-files">Upload files…</button>
+                    <button class="btn-ghost btn-xs" id="btn-pick-dir">Upload folder…</button>
                 </div>
-                
-                <div class="view-header">
-                    <h3>Output Console</h3>
-                    <div class="view-actions">
-                        <button id="btn-clear" class="ghost-btn">Clear</button>
-                    </div>
+                <input type="file" id="fusion-file-input" accept=".json" multiple hidden>
+                <input type="file" id="fusion-dir-input" webkitdirectory directory hidden>
+            </section>
+
+            <section class="rail-section rail-history">
+                <div class="rail-label">
+                    History
+                    <button class="btn-ghost btn-xs" id="btn-clear-history">clear</button>
                 </div>
-                
-                <div class="console-body">
-                    <pre id="json-output">Select an action on the left to execute scripts and view output here...</pre>
-                    <div id="formatted-output" class="hidden"></div>
-                </div>
+                <ul class="history-list" id="history-list">
+                    <li class="history-empty">No requests yet</li>
+                </ul>
+            </section>
+        </aside>
+
+        <!-- ── MAIN ──────────────────────────────────── -->
+        <main class="main">
+            <!-- URL bar -->
+            <div class="url-bar">
+                <select id="method" class="method-select" aria-label="HTTP method">
+                    <option value="GET">GET</option>
+                    <option value="POST">POST</option>
+                    <option value="PUT">PUT</option>
+                    <option value="PATCH">PATCH</option>
+                    <option value="DELETE">DELETE</option>
+                </select>
+                <div class="url-host" id="url-host">https://test.connect.plex.com/</div>
+                <input
+                    type="text"
+                    id="path-input"
+                    class="path-input"
+                    placeholder="mdm/v1/parts"
+                    spellcheck="false"
+                    autocomplete="off"
+                >
+                <button class="btn-primary" id="btn-send">Send</button>
+            </div>
+
+            <!-- Params -->
+            <div class="params-row">
+                <label class="params-label">Query</label>
+                <input
+                    type="text"
+                    id="params-input"
+                    class="params-input"
+                    placeholder="key=value&key2=value2"
+                    spellcheck="false"
+                    autocomplete="off"
+                >
+            </div>
+
+            <!-- Response status strip -->
+            <div class="status-strip" id="status-strip">
+                <span class="ss-idle">Ready · Ctrl+Enter to send</span>
+            </div>
+
+            <!-- Response tabs -->
+            <div class="resp-tabs">
+                <button class="tab active" data-tab="body">Body</button>
+                <button class="tab" data-tab="headers">Headers</button>
+                <button class="tab" data-tab="raw">Raw</button>
+                <div class="tab-spacer"></div>
+                <button class="btn-ghost btn-xs" id="btn-copy">Copy</button>
+                <button class="btn-ghost btn-xs" id="btn-clear">Clear</button>
+            </div>
+
+            <!-- Response body -->
+            <section class="resp-body">
+                <pre id="resp-pre" class="resp-pre">// Response will appear here</pre>
             </section>
         </main>
     </div>
 
-    <!-- Local Script -->
     <script src="{{ url_for('static', filename='js/script.js') }}"></script>
 </body>
 </html>
