@@ -7,6 +7,12 @@ Auth:      X-Plex-Connect-Api-Key header (Consumer Key from Developer Portal)
 Rate:      200 calls/minute
 """
 
+# bootstrap MUST be imported before anything reads PLEX_API_KEY/SECRET from
+# os.environ — it injects values from .env.local (if present) so the dev
+# loop doesn't require setting env vars in every shell. Real shell env
+# always wins via setdefault semantics.
+import bootstrap  # noqa: F401
+
 import requests
 import json
 import csv

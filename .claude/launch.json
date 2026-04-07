@@ -1,0 +1,11 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "plex-api",
+      "runtimeExecutable": "py",
+      "runtimeArgs": ["app.py"],
+      "port": 5000
+    }
+  ]
+}

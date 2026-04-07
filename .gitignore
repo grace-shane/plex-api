@@ -1,2 +1,21 @@
 __pycache__/
 *.pyc
+
+# dotenv — local secrets, NEVER commit
+.env
+.env.local
+.env.*.local
+
+# editor / IDE
+.vscode/
+.idea/
+*.swp
+
+# Python tooling
+.pytest_cache/
+.coverage
+htmlcov/
+.tox/
+*.egg-info/
+build/
+dist/
