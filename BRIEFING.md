@@ -22,28 +22,31 @@ Forked from just-shane/plex-api. Grace Engineering's working copy.
 
 ## Current situation
 
-- Connected and authenticating successfully — but to the WRONG tenant (G5)
-- G5 is real production data belonging to another company — READ ONLY, no writes
-- IT (Courtney) is resolving tenant access for Grace Engineering
-- No new credentials needed — switching tenants = enabling one header
+- Courtney issued a new dev portal app: **Fusion2Plex** (April 2026)
+- Key + Secret live in `.env.local` (gitignored). Loaded by `bootstrap.py`.
+- The new key **expires every 31 days** — we need a rotation reminder
+- The Fusion2Plex app has been approved for **Tooling** and **Standalone MES** API products only — Common APIs, Purchasing, and Production Control are still pending Courtney's approval
+- We do not yet know which tenant the new app is bound to, because `mdm/v1/tenants` requires Common APIs (currently 401)
 - Use https://test.connect.plex.com (test. prefix) for all development
+
+> **Earlier (now superseded) belief:** we thought the 403 → 401 errors on tooling endpoints were tenant scoping. They were not. The original `Plex_API_Reference.md` was right: it's per-product subscription approval in the dev portal. The `Fusion2Plex` access matrix (see Plex_API_Reference §3) confirms this empirically — tooling endpoints now return 404 (auth ok, no resource), MDM endpoints return 401 (not subscribed).
 
 ---
 
-## Auth — three headers required
-X-Plex-Connect-Api-Key:    <key>      # identifies the app
-X-Plex-Connect-Api-Secret: <secret>   # second factor, same credential
-X-Plex-Connect-Tenant-Id:  <uuid>     # tenant routing — omit = defaults to G5
+## Auth — header model
+X-Plex-Connect-Api-Key:    <key>      # identifies the app, scoped to subscribed API products
+X-Plex-Connect-Api-Secret: <secret>   # second factor, paired with the key
+X-Plex-Connect-Tenant-Id:  <uuid>     # optional — omit to use the app's default tenant
 
-Keys and secrets are managed here in Claude Code via environment variables.
+Keys and secrets are loaded from `.env.local` via `bootstrap.py` at startup.
 Never hardcode credentials. Never commit credentials.
 
-### Tenants
+### Tenants (historical reference — may be re-verified once Common APIs is enabled)
 
 | Name            | Tenant ID                              | Status                        |
 |-----------------|----------------------------------------|-------------------------------|
-| Grace Eng.      | a6af9c99-bce5-4938-a007-364dc5603d08  | Target — waiting on IT        |
-| G5              | b406c8c4-cef0-4d62-862c-1758b702cd02  | Currently connected — READ ONLY |
+| Grace Eng.      | a6af9c99-bce5-4938-a007-364dc5603d08  | Target tenant for sync writes |
+| G5              | b406c8c4-cef0-4d62-862c-1758b702cd02  | Old app's bound tenant — read-only, another company |
 
 ---
 
@@ -80,16 +83,30 @@ Fusion 360 .json (network share, via ADC)
 | GET purchasing/v1/purchase-orders      | URL-encode spaces in filter values             |
 | GET production/v1/control/workcenters  | Target for pocket/turret assignment pushes     |
 
-### 403 responses — suspected tenant routing, not subscription
+### Access matrix — Fusion2Plex app (verified empirically)
 
-- tooling/v1/tools
-- tooling/v1/tool-assemblies
-- tooling/v1/tool-inventory
+Plex returns **HTTP 401 `REQUEST_NOT_AUTHENTICATED`** for any endpoint
+whose API product the app is NOT subscribed to. The same 401 also covers
+genuinely bad credentials, so the only way to tell the two apart is by
+comparing across endpoints.
 
-Working hypothesis: these 403s will resolve once IT completes the tenant
-routing change for Grace Engineering. Cannot verify until tenant access lands,
-since G5 is another company's data and we have no authority to test writes
-there. The tenant change is the **only** open IT blocker.
+A subscribed-but-resource-missing endpoint returns **404 `RESOURCE_NOT_FOUND`**.
+
+| Path                                  | Status | Notes |
+|---------------------------------------|--------|-------|
+| mdm/v1/tenants                        | 401    | Need Common APIs |
+| mdm/v1/parts                          | 401    | Need Common APIs |
+| mdm/v1/suppliers                      | 401    | Need Common APIs |
+| purchasing/v1/purchase-orders         | 401    | Need Purchasing |
+| production/v1/control/workcenters     | 401    | Need Production Control |
+| manufacturing/v1/operations           | 404    | ✅ Standalone MES enabled |
+| tooling/v1/tools                      | 404    | ✅ Tooling enabled |
+| tooling/v1/tool-assemblies            | 404    | ✅ Tooling enabled |
+| tooling/v1/tool-inventory             | 404    | ✅ Tooling enabled |
+
+Pending IT actions: ask Courtney to also approve the `Fusion2Plex` app for
+**Common APIs**, **Purchasing**, and **Production Control** in the Plex
+developer portal.
 
 ---
 
@@ -161,14 +178,15 @@ All items below are mirrored as GitHub Issues — see
 https://github.com/grace-shane/plex-api/issues for live status.
 
 1. ~~Fix PlexClient constructor — add api_secret, include header~~ DONE
-2. Read baseline tooling inventory from mdm/v1/parts — issue #2 (unblocked,
-   read-only — can start today on G5)
+2. Read baseline tooling inventory from mdm/v1/parts — issue #2
+   BLOCKED on Common APIs subscription (currently 401)
 3. build_part_payload(tool: dict) -> dict — issue #3
-   Maps Fusion tool object to mdm/v1/parts POST body
+   Maps Fusion tool object to mdm/v1/parts POST body. Blocked on Common APIs.
 4. resolve_supplier_uuid(vendor_name: str) -> str — issue #3
-   Looks up supplier UUID from mdm/v1/suppliers (safe to test on G5 read)
+   Looks up supplier UUID from mdm/v1/suppliers. Blocked on Common APIs.
 5. build_assembly_payload(tool: dict, holder: dict) -> dict — issue #4
-   Draft only — endpoints currently 403 (suspected tenant scoping)
+   tooling/v1/tool-assemblies is now reachable (Tooling API approved).
+   Need to figure out the correct paths/payloads. NO LONGER BLOCKED.
 6. Core sync logic — upsert with guid-based dedup — issue #7
 7. Error handling + logging to network share text file — issue #8
 
@@ -176,20 +194,25 @@ https://github.com/grace-shane/plex-api/issues for live status.
 
 ## Gotchas — read before touching anything
 
-- **G5 is production data. Read only. No writes, no mutations.**
-- PLEX_API_KEY and PLEX_API_SECRET must be set in the environment before
-  running plex_api.py or app.py — both will hard-fail with a clear message
-  if they are missing
-- The previously hardcoded API key (k3SmLW3y…) is still in git history on
-  master and must be rotated before production deployment — see issue #12
+- **G5 is another company's data. Reads we got there were tied to the OLD
+  app key — not the current Fusion2Plex app. The old key is dead.**
+- PLEX_API_KEY and PLEX_API_SECRET come from `.env.local` via `bootstrap.py`.
+  A real shell env var with the same name will OVERRIDE `.env.local` (by
+  design) — clear stale shell vars if you have them.
+- **The previously hardcoded API key (k3SmLW3y…) is dead.** It's still in
+  git history but no longer authenticates. The current key is the
+  Fusion2Plex Consumer Key in `.env.local`, which expires every 31 days.
+  See issue #12 for the rotation cadence.
+- **Plex returns 401 `REQUEST_NOT_AUTHENTICATED` for both bad credentials
+  AND endpoints under unsubscribed API products.** The only way to tell
+  them apart is to compare across multiple endpoints — if SOME calls
+  return 200/404 and OTHERS return 401, the 401s are subscription, not
+  auth. See the access matrix above.
 - mdm/v1/parts has NO server-side pagination — unfiltered = entire DB pulled
 - supplierId in responses is a UUID, not a supplier code (MSC != "MSC001")
 - URL-encode spaces in filter strings (MRO SUPPLIES -> MRO%20SUPPLIES)
 - API key must be in header — URL parameter returns 401
 - PowerShell: use Invoke-RestMethod, not curl (alias doesn't pass headers)
-- Tooling 403s on tooling/v1/* are SUSPECTED to be tenant scoping, not API
-  collection subscription. Working hypothesis only — cannot verify until
-  tenant routing lands. See issue #1.
 - Fusion Tool objects from CAM API are copies, not references
 - ADC stale file guard will abort sync if network share files are > 25h old
 - BROTHER SPEEDIO ALUMINUM.json is committed to repo for reference only —
