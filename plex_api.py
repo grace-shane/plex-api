@@ -271,18 +271,18 @@ def discover_all(client):
             status = r.status_code
             note = ""
             if status == 200:
-                note = "✅ Available"
+                note = "[OK] Available"
             elif status == 401:
-                note = "❌ Auth error"
+                note = "[ERR] Auth error"
             elif status == 403:
-                note = "🔒 Not subscribed"
+                note = "[LOCK] Not subscribed"
             elif status == 404:
-                note = "❓ Not found"
+                note = "[?] Not found"
             else:
-                note = f"⚠️  HTTP {status}"
+                note = f"[!] HTTP {status}"
         except Exception as e:
             status = 0
-            note = f"❌ Exception: {e}"
+            note = f"[ERR] Exception: {e}"
 
         print(f"  {note:25s} {collection}/{version}/{resource}")
         report.append({
