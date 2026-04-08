@@ -2,30 +2,45 @@
 
 Nightly automation that syncs Autodesk Fusion 360 tool library data into Rockwell Automation Plex
 Manufacturing Cloud (ERP). Fusion 360 JSON files on a local network share are the absolute source
-of truth; the script reads them and pushes tooling data to Plex via REST API every night at midnight.
+of truth. As of the April 2026 architecture pivot, Fusion data lands first in a Supabase
+database (enriched source of truth — geometry, holder pairings, pocket assignments) and then an
+identity slice (vendor part number + description) is pushed on to Plex's `supply-items` endpoint.
+The React UI reads from Supabase; Plex gets only what its schema can accept.
 
 ## Status
 
 | | |
 |---|---|
 | **Plex environment** | `connect.plex.com` (production) — there is no test environment for this app |
-| **Plex app** | `Fusion2Plex` Consumer Key, expires every 31 days |
+| **Plex app** | `Fusion2Plex` Consumer Key, expires every 31 days (next rotation: 2026-05-08, issue #12) |
 | **Plex tenant** | `58f781ba-1691-4f32-b1db-381cdb21300c` (Grace Engineering) |
-| **Tooling endpoint** | `inventory/v1/inventory-definitions/supply-items` filtered to `category="Tools & Inserts"` (1,109 records currently) |
+| **Tooling endpoint** | `inventory/v1/inventory-definitions/supply-items` filtered to `category="Tools & Inserts"` (1,109 records) |
 | **Workcenters** | `production/v1/production-definitions/workcenters` (143 records, including 21 mills mapping directly to Brother Speedio FTP IPs) |
-| **Phase** | Phase 3 — read baseline complete (#2 closed). Write-side drafting next (#3) |
-| **Tests** | 156 pytest tests, all green. CI on PRs to master via GitHub Actions. Branch protection requires the check to pass. |
+| **Supabase** | `bulletforge` project (us-east-2), 7 tables prefixed `fusion2plex_` — tool libraries, holders, tools (with `raw_json`), assemblies, workcenter assignments, suppliers cache, sync log |
+| **Phase** | **Phase B complete** — `validate_library.py` pre-sync gate landed (#25). Phase A-Python (Supabase upsert layer) is next. |
+| **Tests** | 215 pytest tests, all green. CI on PRs to master via GitHub Actions. Branch protection requires the check to pass. |
 
 ## Architecture
 
 ```
-Fusion 360 .json (network share, via Autodesk Desktop Connector)
-  └── tool_library_loader.py    reads + validates JSON, stale-file guard
-  └── transform layer           build_supply_item_payload (in progress, issue #3)
-  └── plex_api.py / PlexClient  pushes to Plex REST API
-        ├── inventory/v1/inventory-definitions/supply-items   (cutting tools)
-        └── production/v1/production-definitions/workcenters  (machine setup docs)
+Fusion 360 JSON (network share, via Autodesk Desktop Connector)
+        │
+        ▼
+  validate_library.py          ← pre-sync gate: abort if library is invalid (#25)
+        │
+        ▼
+  sync_supabase.py             ← upsert full tool records into Supabase  [Phase A-Python]
+        │
+        ├──▶  Supabase (bulletforge)   ← enriched source of truth
+        │           │
+        │           └──▶  React UI     ← tool library browser  [Phase D+]
+        │
+        └──▶  sync_plex.py             ← identity slice only → supply-items  [Phase C]
 ```
+
+Why the pivot: Plex's `supply-items` schema is identity-only — vendor part number and description,
+nothing else. Geometry, holder pairings, and pocket assignments have no home in Plex. Supabase
+holds the full record; Plex gets the slice it can accept.
 
 The original plan to write to `mdm/v1/parts` and `tooling/v1/tool-assemblies` was incorrect — see
 [BRIEFING.md "History of incorrect hypotheses"](./docs/BRIEFING.md) for the postmortem.
@@ -72,6 +87,24 @@ The original plan to write to `mdm/v1/parts` and `tooling/v1/tool-assemblies` wa
    py -m pytest
    ```
 
+5. **Validate a Fusion library before syncing**
+
+   ```powershell
+   # Production mode — PASS/FAIL only, exit code 0 or 1
+   py validate_library.py --file "BROTHER SPEEDIO ALUMINUM.json" --no-api
+
+   # Verbose — shows WARN issues too
+   py validate_library.py --file "BROTHER SPEEDIO ALUMINUM.json" --no-api --verbose
+
+   # With live Plex supplier lookup for VENDOR_NOT_IN_PLEX checks
+   py validate_library.py --file "BROTHER SPEEDIO ALUMINUM.json" --verbose
+   ```
+
+   The validator catches duplicate product-ids, missing required fields, non-positive geometry,
+   unknown tool types, and vendors that won't resolve to a Plex supplier. The sync layer gates on
+   a PASS; FAILs abort the sync before anything touches Supabase or Plex. Full rule table in
+   [`docs/validate_library_spec.md`](./docs/validate_library_spec.md).
+
 ## Production safety
 
 This codebase reads from real Grace Engineering production data on every API call. Two guard rails
@@ -100,10 +133,10 @@ protect against accidental writes:
 - [`docs/Fusion360_Tool_Library_Reference.md`](./docs/Fusion360_Tool_Library_Reference.md) — Fusion JSON
   schema and field-to-Plex mapping
 - [`docs/validate_library_spec.md`](./docs/validate_library_spec.md) — design spec for the pre-sync
-  validation gate (implementation tracked as a GitHub issue)
+  validation gate; implemented as `validate_library.py` (#25)
 - [`TODO.md`](./TODO.md) — project roadmap mirrored to GitHub Issues
-- [GitHub Issues](https://github.com/grace-shane/plex-api/issues) — live status of every Phase 3-5
-  work item with dependencies and blockers
+- [GitHub Issues](https://github.com/grace-shane/plex-api/issues) — live status of every phase work
+  item with dependencies and blockers
 - [Plex Manufacturing Cloud API docs](https://www.rockwellautomation.com/en-us/support/plex-manufacturing-cloud/api.html)
 
 ## Contributing workflow
