@@ -22,6 +22,12 @@ if str(ROOT) not in sys.path:
 os.environ.setdefault("PLEX_API_KEY", "test-key-do-not-use")
 os.environ.setdefault("PLEX_API_SECRET", "test-secret-do-not-use")
 
+# Dummy Supabase credentials so supabase_client imports cleanly under pytest.
+# Tests NEVER hit the real Supabase project — they use FakeSupabaseClient or
+# patch ``requests.Session``.
+os.environ.setdefault("SUPABASE_URL", "https://test.supabase.co")
+os.environ.setdefault("SUPABASE_SERVICE_ROLE_KEY", "test-supabase-key-do-not-use")
+
 
 # ─────────────────────────────────────────────
 # Shared fixtures

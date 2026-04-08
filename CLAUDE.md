@@ -26,6 +26,15 @@ repository. **Read these files in this order before doing anything**:
    that block + appending one line to the Decision Log. See the
    "Notion pages" section in `docs/BRIEFING.md` for details.
 
+6. **Supabase staging layer** — Fusion JSON is ingested into the
+   `fusion2plex_*` tables in the `bulletforge` Supabase project
+   (`uhmpkprcxrajbtkvqmwg`, us-east-2) before anything pushes to Plex.
+   Schema spec: [Notion · Supabase Schema Design](https://www.notion.so/33c3160a3abf814c885cc174cda76d17).
+   Code: `supabase_client.py`, `sync_supabase.py`, `scripts/load_sample.py`.
+   Credentials: `SUPABASE_URL` + `SUPABASE_SERVICE_ROLE_KEY` in `.env.local`.
+   Issue #31. Downstream (`build_supply_item_payload`, #3) reads from
+   `fusion2plex_tools`, not raw JSON.
+
 ## Hard rules
 
 - **Never read credentials from images.** Always have the user paste them
@@ -40,6 +49,8 @@ repository. **Read these files in this order before doing anything**:
   requires the `pytest` GitHub Actions check to pass before any merge.
 - **Use the `claude/<short-name>` branch naming convention** for new
   branches off master, then auto-merge with `gh pr merge --auto --squash`.
+- **Never ship the Supabase service role key to a browser.** It bypasses
+  RLS. Server-side ingest scripts only.
 
 ## Quick commands
 
