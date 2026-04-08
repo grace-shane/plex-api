@@ -20,6 +20,12 @@ repository. **Read these files in this order before doing anything**:
 4. **[`TODO.md`](./TODO.md)** — project roadmap, links to GitHub Issues
    for live status.
 
+5. **Fusion2Plex Notion page** — https://www.notion.so/Grace-Engineering-Fusion2Plex-33c3160a3abf81f1aac0e58101952be5
+   — **read at the start of every session.** Current State block tells
+   you phase, next action, and test count. End each session by updating
+   that block + appending one line to the Decision Log. See the
+   "Notion pages" section in `docs/BRIEFING.md` for details.
+
 ## Hard rules
 
 - **Never read credentials from images.** Always have the user paste them
