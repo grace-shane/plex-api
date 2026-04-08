@@ -1,7 +1,14 @@
 # Grace Engineering — Plex API: Claude Code Briefing
 
 This is the primary context document for AI-assisted development sessions.
-Read this first, then read plex_api.py and tool_library_loader.py.
+Read this first, then read `plex_api.py`, `tool_library_loader.py`, and
+`docs/validate_library_spec.md` (the pre-sync validation gate design, #25).
+
+> **File layout note.** As of 2026-04-08, all long-form docs live under
+> `docs/`. This file is `docs/BRIEFING.md`, not `./BRIEFING.md`. Siblings:
+> `docs/Plex_API_Reference.md`, `docs/Fusion360_Tool_Library_Reference.md`,
+> `docs/validate_library_spec.md`. `README.md`, `CLAUDE.md`, and `TODO.md`
+> are still at the repo root. See PR #24 for the move.
 
 > **Read the "History of incorrect hypotheses" section at the bottom of this
 > file before changing anything credential- or tenant-related.** It documents
@@ -279,20 +286,29 @@ https://github.com/grace-shane/plex-api/issues for live status.
    issue #2 closed). `extract_supply_items(client)` in plex_api.py
    returns the filtered list and writes a CSV snapshot. Verified
    live: 1,109 records, 30 KB response, 1.4s round trip.
-4. `build_supply_item_payload(fusion_tool: dict) -> dict` — issue #3.
+4. **`validate_library.py` pre-sync validation gate — issue #25.**
+   Implement the full spec at `docs/validate_library_spec.md`: three
+   entry points (CLI / programmatic / Flask), library-level + per-tool
+   rule tables, cached supplier lookup for vendor validation, integration
+   hook in `tool_library_loader.load_library()` that aborts the sync on
+   FAIL. **Gates all write-side work below** — must land before #3 or
+   #7 can safely touch production.
+5. `build_supply_item_payload(fusion_tool: dict) -> dict` — issue #3.
    Maps Fusion tool to a supply-item POST body with
    `category="Tools & Inserts"`, `group="Machining"`,
    `supplyItemNumber=<vendor part-id>`, `description=<fusion description>`.
-5. Match-and-upsert logic by `supplyItemNumber` — issue #3.
+   Runs validate_library gate first.
+6. Match-and-upsert logic by `supplyItemNumber` — issue #3.
    Read existing supply-items via extract_supply_items(), match by
    vendor part number, decide POST (new) vs PUT (update existing).
-6. Workcenter doc push — issue #6. Use the verified path
+7. Workcenter doc push — issue #6. Use the verified path
    `production/v1/production-definitions/workcenters/{id}` and the
    workcenterCode → Brother Speedio mapping (codes 879, 880).
    We have READ-only verified; write endpoint shape still TBD.
-7. Core sync logic — upsert with `supplyItemNumber` dedup — issue #7.
+8. Core sync logic — upsert with `supplyItemNumber` dedup — issue #7.
    Dry-run by default. Real writes require `PLEX_ALLOW_WRITES=1`.
-8. Error handling + logging to network share text file — issue #8.
+   Calls validate_library gate before every run.
+9. Error handling + logging to network share text file — issue #8.
 
 ### Architectural decisions still pending (issues #4 and #5)
 
@@ -443,6 +459,47 @@ is being used. We should also probably make `bootstrap.py` log when
 ## Session log
 
 Reverse chronological. Each entry: what was the goal, what landed, what's left.
+
+### 2026-04-08 — docs reorg + validate_library spec + drift cleanup
+
+**Started with:**
+- All long-form docs (BRIEFING, Plex_API_Reference, Fusion360_Tool_Library_Reference) sitting in the repo root alongside source code
+- No design spec for the pre-sync validation gate — the need for one was implicit in #3 and #7 but nothing was written down
+- Content drift across docs: architecture diagram in BRIEFING still showed discredited endpoints (`mdm/v1/parts`, `tooling/v1/tool-assemblies`, `production/v1/control/workcenters`), test count frozen at "119+", `docs/Plex_API_Reference.md` Section 4 Target State still pointed at `tooling/v1/tool-assemblies`, line 5 referenced `plexonline.com` (classic UI, not the REST gateway), TODO.md Phase 3 item #1 still `[ ]` despite PR #21 having closed #2
+- User had untracked `data/` (Fusion API reference PDFs, ~10 MB) and `outputs/` (CSV extractor snapshot, 154 KB) in the main workspace
+- A fresh `docs/validate_library_spec.md` (455 lines) written locally but not yet committed
+
+**Ended with:**
+- `docs/` folder created. `BRIEFING.md`, `Plex_API_Reference.md`, `Fusion360_Tool_Library_Reference.md` all moved. Git detected them as 100% renames, so history is preserved — `git log --follow docs/BRIEFING.md` still works.
+- `docs/validate_library_spec.md` committed — full design spec for the `validate_library.py` pre-sync validation gate. Three entry points (CLI, programmatic hook in `tool_library_loader`, Flask `/api/fusion/validate`), full library-level + per-tool rule tables, supplier lookup strategy with closest-3 edit-distance hint in debug mode, integration hooks.
+- **GitHub issue #25 opened** — `feat: implement validate_library.py pre-sync validation gate`. Blocks #3 and #7. Spec backfilled with the real issue number (was `#XX`).
+- `.gitignore` additions: `data/`, `outputs/`, `.claude/worktrees/`
+- All 6 drift items fixed (test count, architecture diagram, plexonline, Target State rewrite, TODO checkbox, spec issue number)
+- README.md + CLAUDE.md link paths updated to the new `./docs/` prefix
+- 156 tests still green — no code changes this session, docs-only
+
+**Pull requests merged this session** (newest first):
+- #26 docs: fix stale content drift in BRIEFING, Plex_API_Reference, TODO, spec
+- #24 docs: move long-form docs into `docs/`, add validate_library spec, gitignore large dirs
+
+**GitHub issues opened:**
+- **#25** feat: implement `validate_library.py` pre-sync validation gate — blocks #3 and #7
+
+**What's left to do next session** (in order):
+1. **Issue #25** — implement `validate_library.py` per `docs/validate_library_spec.md`. This is now the highest-priority item since it gates the upsert work. Expect: new module + CLI + Flask routes + loader hook + ~30 pytest cases covering every Rule ID.
+2. **Issue #3** — `build_supply_item_payload(fusion_tool)` + match-and-upsert logic, with the validate_library gate called first.
+3. **Architectural decisions on #4, #5** — still blocked on a product question, not a code question.
+4. **Issue #6** — workcenter doc write support (carefully, with `PLEX_ALLOW_WRITES=1` set deliberately).
+5. **Issue #12** — key rotation deadline 2026-05-08.
+
+**Lessons** (follow-ups to "History of incorrect hypotheses" if anything goes sideways the same way):
+
+6. **Worktree gotcha — the painful one this session.** I burned ~30 minutes and a lot of tokens looking for a `docs/` folder the user said they'd added. I kept running `ls` and `git status` from a worktree at `.claude/worktrees/naughty-khayyam/`, not the main workspace at `C:/projects/plex-api/`. Worktrees share the `.git` directory (via `.git` file pointer) but have independent working trees — any new files the user creates in the main workspace are invisible to worktree `ls`. **Rule: when the user says "I added X locally" or "I moved stuff around", the first command is `cd "C:/projects/plex-api" && git status` in the main workspace, not the worktree.** Don't trust the worktree's view of the filesystem for anything the user did in File Explorer.
+7. **Git rename detection is automatic.** The user moved files with File Explorer before I got there. Git saw them as deletes + untracked adds. Running `git rm` on the old paths and `git add` on the new paths in the **same commit** lets git's diff-rename detection catch them as 100% renames, preserving history. No special `git mv` step is needed — git is smart about this at commit time, not at stage time. The PR showed them as `rename BRIEFING.md => docs/BRIEFING.md (100%)` without any extra ceremony.
+8. **Open issues before writing specs that reference them.** The validate_library spec had `#XX` placeholders for the implementation issue. Cleaner workflow: open the issue first, get the real number, then write the spec with the real number baked in. Otherwise you end up with a two-step commit (add spec with `#XX`, then a follow-up PR to backfill `#25`).
+9. **Always re-run `git status` from the correct cwd after a worktree operation.** The shell in the Claude harness runs each Bash command with the cwd reset to the worktree root — which means `cd` inside a Bash call is ephemeral. Chain commands with `&&` when the later ones need to see the earlier `cd` effect. Every `Bash(cd X && git foo)` reminds you of this.
+
+---
 
 ### 2026-04-07 — full project bootstrap + Phase 3 read side
 
