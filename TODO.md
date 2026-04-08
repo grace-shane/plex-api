@@ -20,7 +20,7 @@ This document outlines the step-by-step implementation plan for the Autodesk Fus
 
 ## Phase 3: Plex API Source-of-Truth Implementation
 
-- [ ] Implement API call to retrieve current tooling inventory — `inventory/v1/inventory-definitions/supply-items` returns 2,516 records, of which 1,109 are `category="Tools & Inserts"`. Filter client-side. → [#2](https://github.com/grace-shane/plex-api/issues/2)
+- [x] **DONE (PR #21).** Implement API call to retrieve current tooling inventory — `extract_supply_items(client)` in `plex_api.py` hits `inventory/v1/inventory-definitions/supply-items` (2,516 records), filters to `category="Tools & Inserts"` (1,109 records), and writes a CSV snapshot to `outputs/`. Verified live: 30 KB response, 1.4s round trip. → [#2](https://github.com/grace-shane/plex-api/issues/2) *(closed)*
 - [ ] Implement API call to upsert supply-items — `build_supply_item_payload(fusion_tool)` writes to `inventory/v1/inventory-definitions/supply-items` with `supplyItemNumber=<vendor part-id>`. Drafting can begin against the verified read path. → [#3](https://github.com/grace-shane/plex-api/issues/3)
 - [ ] Implement Tool Assembly handling — Plex's supply-item schema is identity-only (no holder linkage). Tool assemblies as a separate concept may not exist in this app's API surface. **Investigate or descope.** → [#4](https://github.com/grace-shane/plex-api/issues/4)
 - [ ] Implement API call to link tools to Routings/Operations — `mdm/v1/operations` exposes only `code, id, inventoryType, type` with no FK to tools. **Linkage may not be possible via API**; may require CSV upload or different approach. → [#5](https://github.com/grace-shane/plex-api/issues/5)

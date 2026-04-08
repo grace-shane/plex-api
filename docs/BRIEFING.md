@@ -79,12 +79,12 @@ Tenant IDs are not secrets — they are committed as defaults in
 ```
 Fusion 360 .json (network share, via Autodesk Desktop Connector)
   └── tool_library_loader.py    reads + validates JSON, stale-file guard
-  └── transform layer           build_part_payload, build_assembly_payload
+  └── validate_library.py       pre-sync validation gate (spec only, #25)
+  └── transform layer           build_supply_item_payload (in progress, #3)
   └── plex_api.py / PlexClient  pushes to Plex REST API
-        ├── mdm/v1/parts                consumable tools
-        ├── mdm/v1/suppliers            resolve vendor UUIDs
-        ├── tooling/v1/tool-assemblies  see History §3 below
-        └── production/v1/control/workcenters  see History §3 below
+        ├── inventory/v1/inventory-definitions/supply-items   cutting tools (category="Tools & Inserts")
+        ├── mdm/v1/suppliers                                  resolve vendor UUIDs
+        └── production/v1/production-definitions/workcenters  machine setup docs (per-id write shape TBD, #6)
 ```
 
 ### Industry hierarchy (Plex data model)
@@ -262,7 +262,7 @@ Sync filter: include only `type != "holder" AND type != "probe"`
 - `pytest` suite in `tests/`. CI on PRs to `master` via
   `.github/workflows/test.yml`. Branch protection on master requires the
   `pytest` check to pass before merge. Auto-merge enabled.
-- Currently 119+ tests, all green.
+- Currently 156 tests, all green.
 
 ---
 

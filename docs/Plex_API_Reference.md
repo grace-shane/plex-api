@@ -2,7 +2,7 @@
 
 ## 1. Overview
 
-This reference document synthesizes the discoveries from preliminary API testing and aligns them with the **Fusion 360 Tool Library Synchronization** architectural goals. It serves as the master guide for developers interacting with the Grace Engineering Plex instance (`plexonline.com`).
+This reference document synthesizes the discoveries from preliminary API testing and aligns them with the **Fusion 360 Tool Library Synchronization** architectural goals. It serves as the master guide for developers interacting with the Grace Engineering Plex instance via the `connect.plex.com` REST API gateway.
 
 *Note: Grace Engineering runs Plex Classic, MES+ enabled, supporting Prime Archery and Montana Rifle Company.*
 
@@ -132,18 +132,19 @@ does nothing and use real filters or accept the full DB pull.**
 
 ## 4. Current Tooling Data Flow (Fusion 360 to Plex)
 
-While waiting for the Tooling APIs to be activated, data can be managed in two ways:
+Data flows from Fusion 360 to Plex via the REST API. The `tooling/v1/*` path namespace referenced in earlier drafts of this document does NOT exist on the Fusion2Plex app — see Section 3 and [`BRIEFING.md` History §3](./BRIEFING.md) for the postmortem.
 
 1. **REST API Automation (Target State)**
-   - A scheduled script parses the network share `BROTHER SPEEDIO ALUMINUM.json` library.
-   - Extracts `product-id`, `vendor`, and geometry.
-   - Pushes payloads to `tooling/v1/tool-assemblies` to update the master inventory list.
-   - Pushes payload to `production/v1/control/workcenters` utilizing the `post-process.number` to ensure correct turret/pocket placement.
+   - A scheduled script parses the network share Fusion 360 tool library JSON files.
+   - Extracts `product-id`, `vendor`, `description`, and `geometry`.
+   - Pre-sync validation gate runs via `validate_library.py` (spec only, see [`validate_library_spec.md`](./validate_library_spec.md), implementation issue #25).
+   - Pushes payloads to `inventory/v1/inventory-definitions/supply-items` with `category="Tools & Inserts"`, `group="Machining"`, and `supplyItemNumber=<vendor part-id>` as the dedup key. Read path verified (1,109 records); write logic in progress (issue #3).
+   - Pushes payloads to `production/v1/production-definitions/workcenters/{id}` utilizing `post-process.number` for turret/pocket placement. Read path verified; write shape TBD (issue #6).
 
-2. **CSV Upload System (Interim State)**
-   - Without API access, engineering relies on bulk CSV uploads.
+2. **CSV Upload System (Historical Fallback)**
+   - Prior to API access being verified, engineering used bulk CSV uploads.
    - Sequence: **Tool Assembly Upload** ➔ **Tool Inventory Upload** ➔ **Tool BOM Upload** ➔ **Routing Upload**.
-   - Ensure the *Tool Assembly Type* picklist exists in Plex before attempting uploads.
+   - The supply-items REST path above is the target state and supersedes this workflow once issues #3, #6, and #7 land.
 
 ---
 

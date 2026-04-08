@@ -2,7 +2,7 @@
 
 **Project:** Fusion 360 → Plex tooling sync — Grace Engineering
 **Repo:** https://github.com/grace-shane/plex-api
-**Status:** Spec only — implementation tracked as GitHub issue #XX
+**Status:** Spec only — implementation tracked as GitHub issue [#25](https://github.com/grace-shane/plex-api/issues/25)
 
 ---
 
