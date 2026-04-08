@@ -3,17 +3,17 @@
 This is the entry point for Claude Code (or any AI agent) working on this
 repository. **Read these files in this order before doing anything**:
 
-1. **[`BRIEFING.md`](./BRIEFING.md)** — primary context document. Project
+1. **[`docs/BRIEFING.md`](./docs/BRIEFING.md)** — primary context document. Project
    purpose, current credentials, current Plex environment, verified
    endpoint matrix, gotchas, immediate TODO, "History of incorrect
    hypotheses" postmortem, and a session log of what's been done. **This
    is the most important file in the repo for AI context.**
 
-2. **[`Plex_API_Reference.md`](./Plex_API_Reference.md)** — verified URL
+2. **[`docs/Plex_API_Reference.md`](./docs/Plex_API_Reference.md)** — verified URL
    patterns, the 401-vs-404 reading guide, and the no-pagination gotcha.
    Read this before writing any new Plex API call.
 
-3. **[`Fusion360_Tool_Library_Reference.md`](./Fusion360_Tool_Library_Reference.md)**
+3. **[`docs/Fusion360_Tool_Library_Reference.md`](./docs/Fusion360_Tool_Library_Reference.md)**
    — Fusion JSON schema and field-to-Plex mapping. Read this before
    writing anything that consumes the local Fusion library files.
 
