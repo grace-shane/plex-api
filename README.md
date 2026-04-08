@@ -28,7 +28,7 @@ Fusion 360 .json (network share, via Autodesk Desktop Connector)
 ```
 
 The original plan to write to `mdm/v1/parts` and `tooling/v1/tool-assemblies` was incorrect — see
-[BRIEFING.md "History of incorrect hypotheses"](./BRIEFING.md) for the postmortem.
+[BRIEFING.md "History of incorrect hypotheses"](./docs/BRIEFING.md) for the postmortem.
 
 ## Quick start (local development)
 
@@ -93,12 +93,14 @@ protect against accidental writes:
 
 ## Key references
 
-- [`BRIEFING.md`](./BRIEFING.md) — primary context document for AI-assisted dev sessions and the
+- [`docs/BRIEFING.md`](./docs/BRIEFING.md) — primary context document for AI-assisted dev sessions and the
   source of truth for current status, current credentials, gotchas, and project history
-- [`Plex_API_Reference.md`](./Plex_API_Reference.md) — verified endpoint access matrix and URL
+- [`docs/Plex_API_Reference.md`](./docs/Plex_API_Reference.md) — verified endpoint access matrix and URL
   pattern conventions
-- [`Fusion360_Tool_Library_Reference.md`](./Fusion360_Tool_Library_Reference.md) — Fusion JSON
+- [`docs/Fusion360_Tool_Library_Reference.md`](./docs/Fusion360_Tool_Library_Reference.md) — Fusion JSON
   schema and field-to-Plex mapping
+- [`docs/validate_library_spec.md`](./docs/validate_library_spec.md) — design spec for the pre-sync
+  validation gate (implementation tracked as a GitHub issue)
 - [`TODO.md`](./TODO.md) — project roadmap mirrored to GitHub Issues
 - [GitHub Issues](https://github.com/grace-shane/plex-api/issues) — live status of every Phase 3-5
   work item with dependencies and blockers
