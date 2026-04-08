@@ -32,6 +32,28 @@ Forked from just-shane/plex-api. Grace Engineering's working copy.
 
 ---
 
+## Notion pages
+
+Live project state and decision log live in Notion, outside the repo.
+The repo has the "what" (code, specs, CI); Notion has the "where are we
+right now" and the running conversation about trade-offs.
+
+| Page | URL | Purpose |
+|---|---|---|
+| Grace Engineering | https://www.notion.so/33c3160a3abf813f9db6c5f68bef8bf2 | Parent — all Grace work lives under this page |
+| Fusion2Plex | https://www.notion.so/Grace-Engineering-Fusion2Plex-33c3160a3abf81f1aac0e58101952be5 | **Read this at the start of every session.** Current State block = exactly where to pick up. |
+
+### Session protocol
+
+- **Start of session:** read the Fusion2Plex Notion page. The Current
+  State block at the top tells you phase, next action, and test count
+  without having to diff the repo.
+- **End of session:** update the Current State block (phase, next
+  action, test count) and append one line to the Decision Log describing
+  what changed and why.
+
+---
+
 ## Current situation (April 2026)
 
 - **App**: `Fusion2Plex` in the Plex Developer Portal

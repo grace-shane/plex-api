@@ -66,16 +66,27 @@ def _check_file_age(path: Path, max_age_hours: int = MAX_FILE_AGE_HOURS) -> bool
 # ─────────────────────────────────────────────
 # SINGLE FILE LOADER
 # ─────────────────────────────────────────────
-def load_library(path: Path) -> list[dict] | None:
+def load_library(path: Path, validate: bool = False) -> list[dict] | None:
     """
     Load a single Fusion 360 tool library JSON file.
     Returns the list of tool/holder objects from the root "data" array,
-    or None on failure (stale, locked, malformed).
+    or None on failure (stale, locked, malformed, or validation failure).
 
     Handles:
     - File age guard (ADC stall detection)
     - PermissionError (ADC mid-sync file lock)
     - JSON decode errors (incomplete sync / corrupt file)
+    - Schema validation via ``validate_library`` (when ``validate=True``)
+
+    Parameters
+    ----------
+    path
+        Path to a .json tool library file.
+    validate
+        When True, runs ``validate_library.validate_library()`` in PRODUCTION
+        mode with ``use_api=False``. A failing validation returns None so the
+        sync layer can abort cleanly. Default is False to preserve the
+        existing offline diagnostic behaviour; sync callers should pass True.
     """
     if not _check_file_age(path):
         return None  # stale — caller decides whether to abort or skip
@@ -109,6 +120,25 @@ def load_library(path: Path) -> list[dict] | None:
         )
         return None
 
+    if validate:
+        # Imported lazily so that importing tool_library_loader does not
+        # drag in validate_library for every caller that only wants a
+        # raw JSON load.
+        from validate_library import validate_library as _validate, ValidationMode
+
+        result = _validate(
+            tools=tools,
+            library_name=path.stem,
+            mode=ValidationMode.PRODUCTION,
+            use_api=False,
+        )
+        if not result.passed:
+            log.error("Validation failed for %s — sync aborted", path.name)
+            log.error(result.summary())
+            for issue in result.fails:
+                log.error("  %s: %s", issue.rule, issue.message)
+            return None
+
     log.info("Loaded %s — %d entries", path.name, len(tools))
     return tools
 
@@ -119,6 +149,7 @@ def load_library(path: Path) -> list[dict] | None:
 def load_all_libraries(
     directory: Path = CAM_TOOLS_DIR,
     abort_on_stale: bool = True,
+    validate: bool = False,
 ) -> dict[str, list[dict]]:
     """
     Glob all .json files in the flat CAMTools directory and load each one.
@@ -130,6 +161,9 @@ def load_all_libraries(
                      stale. Prevents partial pushes where some libraries are
                      current and others are not.
                      Set False to skip stale files and continue with valid ones.
+    validate       : If True, each library is passed through validate_library
+                     and libraries that fail are treated the same as stale.
+                     Default False; sync callers should pass True.
 
     Returns
     -------
@@ -155,7 +189,7 @@ def load_all_libraries(
     libraries: dict[str, list[dict]] = {}
 
     for path in json_files:
-        tools = load_library(path)
+        tools = load_library(path, validate=validate)
 
         if tools is None:
             if abort_on_stale:

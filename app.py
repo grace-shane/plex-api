@@ -30,8 +30,9 @@ from plex_api import (
     extract_supply_items,
     TOOLING_CATEGORY,
 )
-from tool_library_loader import load_all_libraries
+from tool_library_loader import load_all_libraries, CAM_TOOLS_DIR
 from plex_diagnostics import tenant_whoami, list_tenants, get_tenant
+from validate_library import validate_library, ValidationMode
 
 app = Flask(__name__)
 
@@ -386,6 +387,150 @@ def api_fusion_tools_consumables():
             "status": "success",
             "count": len(consumables),
             "data": consumables,
+        })
+    except Exception as e:
+        return jsonify({"status": "error", "message": str(e), "trace": traceback.format_exc()}), 500
+
+
+@app.route('/api/fusion/validate', methods=['GET', 'POST'])
+def api_fusion_validate():
+    """
+    Pre-sync validation for Fusion 360 tool library JSON.
+
+    GET  — validates live files from the ADC network share
+    POST — validates uploaded JSON file(s) without touching the share
+
+    Query params (GET only):
+        use_api=1   Enable the live Plex supplier lookup for
+                    VENDOR_NOT_IN_PLEX checks. Default off.
+        file=<name> Validate a single library by stem. Default: all files.
+
+    POST shape is the same multipart upload as /api/fusion/tools —
+    each uploaded .json file becomes its own ValidationResult.
+
+    Always runs in VERBOSE mode (human is reading the response).
+    Returns {status, library_count, results: [ValidationResult.to_dict(), ...]}.
+    """
+    try:
+        use_api = request.args.get('use_api', '').strip().lower() in (
+            "1", "true", "yes", "on",
+        )
+
+        results: list[dict] = []
+        cross_library: dict[str, str] = {}
+
+        # Multi-library runs need the cross-library dedupe dict to flow
+        # between calls so CROSS_LIBRARY_DUPLICATE can fire on the second
+        # and later libraries. Build it as we go.
+        def _update_cross(name: str, tools):
+            if not isinstance(tools, list):
+                return
+            from validate_library import _is_sync_candidate
+            for tool in tools:
+                if not isinstance(tool, dict) or not _is_sync_candidate(tool):
+                    continue
+                pid = tool.get("product-id")
+                if isinstance(pid, str) and pid and pid not in cross_library:
+                    cross_library[pid] = name
+
+        if request.method == 'POST':
+            for _key, uploaded_file in request.files.items():
+                if not uploaded_file.filename.endswith('.json'):
+                    continue
+                try:
+                    raw = json.loads(uploaded_file.read().decode('utf-8'))
+                except Exception as e:
+                    results.append({
+                        "library_name": uploaded_file.filename,
+                        "passed": False,
+                        "tool_count": 0,
+                        "sync_candidate_count": 0,
+                        "issues": [{
+                            "severity": "FAIL",
+                            "rule": "STRUCT_ROOT_KEY",
+                            "tool_index": None,
+                            "tool_description": None,
+                            "field": None,
+                            "value": None,
+                            "message": f"Failed to parse uploaded JSON: {e}",
+                        }],
+                        "debug_trace": None,
+                    })
+                    continue
+
+                name = uploaded_file.filename.replace('.json', '')
+                tools = raw.get("data") if isinstance(raw, dict) else raw
+                result = validate_library(
+                    tools=tools,
+                    library_name=name,
+                    mode=ValidationMode.VERBOSE,
+                    use_api=use_api,
+                    client=client if use_api else None,
+                    cross_library_product_ids=dict(cross_library) if cross_library else None,
+                )
+                results.append(result.to_dict())
+                _update_cross(name, tools)
+
+        else:
+            # GET — walk the ADC CAMTools directory
+            single_file = request.args.get('file')
+            if not CAM_TOOLS_DIR.exists():
+                return jsonify({
+                    "status": "error",
+                    "message": f"CAMTools directory not found: {CAM_TOOLS_DIR}",
+                }), 500
+
+            if single_file:
+                files = [CAM_TOOLS_DIR / single_file]
+                if not files[0].exists():
+                    return jsonify({
+                        "status": "error",
+                        "message": f"File not found: {files[0]}",
+                    }), 404
+            else:
+                files = sorted(CAM_TOOLS_DIR.glob("*.json"))
+
+            for path in files:
+                try:
+                    with open(path, "r", encoding="utf-8") as f:
+                        raw = json.load(f)
+                except Exception as e:
+                    results.append({
+                        "library_name": path.stem,
+                        "passed": False,
+                        "tool_count": 0,
+                        "sync_candidate_count": 0,
+                        "issues": [{
+                            "severity": "FAIL",
+                            "rule": "STRUCT_ROOT_KEY",
+                            "tool_index": None,
+                            "tool_description": None,
+                            "field": None,
+                            "value": None,
+                            "message": f"Failed to load file: {e}",
+                        }],
+                        "debug_trace": None,
+                    })
+                    continue
+
+                tools = raw.get("data") if isinstance(raw, dict) else raw
+                result = validate_library(
+                    tools=tools,
+                    library_name=path.stem,
+                    mode=ValidationMode.VERBOSE,
+                    use_api=use_api,
+                    client=client if use_api else None,
+                    cross_library_product_ids=dict(cross_library) if cross_library else None,
+                )
+                results.append(result.to_dict())
+                _update_cross(path.stem, tools)
+
+        all_passed = all(r["passed"] for r in results) if results else True
+        return jsonify({
+            "status": "success",
+            "library_count": len(results),
+            "all_passed": all_passed,
+            "results": results,
         })
     except Exception as e:
         return jsonify({"status": "error", "message": str(e), "trace": traceback.format_exc()}), 500
