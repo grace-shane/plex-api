@@ -1,4 +1,4 @@
-# plex-api — Fusion 360 → Plex tooling sync for Grace Engineering
+# Datum — Fusion 360 → Plex tooling sync for Grace Engineering
 
 Nightly automation that syncs Autodesk Fusion 360 tool library data into Rockwell Automation Plex
 Manufacturing Cloud (ERP). Fusion 360 JSON files on a local network share are the absolute source
@@ -12,7 +12,7 @@ The React UI reads from Supabase; Plex gets only what its schema can accept.
 | | |
 |---|---|
 | **Plex environment** | `connect.plex.com` (production) — there is no test environment for this app |
-| **Plex app** | `Fusion2Plex` Consumer Key, expires every 31 days (next rotation: 2026-05-08, issue #12) |
+| **Plex app** | `Datum` Consumer Key, expires every 31 days (next rotation: 2026-05-08, issue #12) |
 | **Plex tenant** | `58f781ba-1691-4f32-b1db-381cdb21300c` (Grace Engineering) |
 | **Tooling endpoint** | `inventory/v1/inventory-definitions/supply-items` filtered to `category="Tools & Inserts"` (1,109 records) |
 | **Workcenters** | `production/v1/production-definitions/workcenters` (143 records, including 21 mills mapping directly to Brother Speedio FTP IPs) |
@@ -50,14 +50,14 @@ The original plan to write to `mdm/v1/parts` and `tooling/v1/tool-assemblies` wa
 1. **Clone and create your `.env.local`**
 
    ```powershell
-   git clone https://github.com/grace-shane/plex-api.git
-   cd plex-api
+   git clone https://github.com/grace-shane/datum.git
+   cd datum
    copy .env.example .env.local
-   # Edit .env.local with your Fusion2Plex Consumer Key + Secret
+   # Edit .env.local with your Datum Consumer Key + Secret
    ```
 
    `.env.local` is gitignored. Get the Consumer Key from
-   [developers.plex.com](https://developers.plex.com/) → My Apps → Fusion2Plex.
+   [developers.plex.com](https://developers.plex.com/) → My Apps → Datum.
 
 2. **Install dependencies**
 
@@ -135,7 +135,7 @@ protect against accidental writes:
 - [`docs/validate_library_spec.md`](./docs/validate_library_spec.md) — design spec for the pre-sync
   validation gate; implemented as `validate_library.py` (#25)
 - [`TODO.md`](./TODO.md) — project roadmap mirrored to GitHub Issues
-- [GitHub Issues](https://github.com/grace-shane/plex-api/issues) — live status of every phase work
+- [GitHub Issues](https://github.com/grace-shane/datum/issues) — live status of every phase work
   item with dependencies and blockers
 - [Plex Manufacturing Cloud API docs](https://www.rockwellautomation.com/en-us/support/plex-manufacturing-cloud/api.html)
 
