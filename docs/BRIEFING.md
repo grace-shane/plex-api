@@ -1,4 +1,4 @@
-# Grace Engineering — Plex API: Claude Code Briefing
+# Grace Engineering — Datum: Claude Code Briefing
 
 This is the primary context document for AI-assisted development sessions.
 Read this first, then read `plex_api.py`, `tool_library_loader.py`, and
@@ -24,11 +24,15 @@ Rockwell Automation Plex Smart Manufacturing (ERP). Fusion 360 JSON files
 on a local network share are the absolute source of truth. The script reads
 them and pushes tooling data to Plex via REST API every night at midnight.
 
+**Project name: Datum.** Named for the machining reference point — the fixed datum everything is measured from. Fusion 360 is the datum; Plex and Supabase stay in sync with it.
+
 ---
 
-## Repo: https://github.com/grace-shane/plex-api
+## Repo: https://github.com/grace-shane/datum
 
 Forked from just-shane/plex-api. Grace Engineering's working copy.
+
+Renamed from `plex-api` → `datum` on 2026-04-09.
 
 ---
 
@@ -41,11 +45,11 @@ right now" and the running conversation about trade-offs.
 | Page | URL | Purpose |
 |---|---|---|
 | Grace Engineering | https://www.notion.so/33c3160a3abf813f9db6c5f68bef8bf2 | Parent — all Grace work lives under this page |
-| Fusion2Plex | https://www.notion.so/Grace-Engineering-Fusion2Plex-33c3160a3abf81f1aac0e58101952be5 | **Read this at the start of every session.** Current State block = exactly where to pick up. |
+| Datum | https://www.notion.so/Grace-Engineering-Fusion2Plex-33c3160a3abf81f1aac0e58101952be5 | **Read this at the start of every session.** Current State block = exactly where to pick up. |
 
 ### Session protocol
 
-- **Start of session:** read the Fusion2Plex Notion page. The Current
+- **Start of session:** read the Datum Notion page. The Current
   State block at the top tells you phase, next action, and test count
   without having to diff the repo.
 - **End of session:** update the Current State block (phase, next
@@ -56,7 +60,7 @@ right now" and the running conversation about trade-offs.
 
 ## Current situation (April 2026)
 
-- **App**: `Fusion2Plex` in the Plex Developer Portal
+- **App**: `Datum` in the Plex Developer Portal
 - **Environment**: `https://connect.plex.com` — **PRODUCTION**, real Grace data
 - **Tenant**: `58f781ba-1691-4f32-b1db-381cdb21300c` (`Grace`) — verified
   empirically by `GET /mdm/v1/tenants`
@@ -67,7 +71,7 @@ right now" and the running conversation about trade-offs.
   `purchasing/v1/purchase-orders` all return 200
 - **Writes are blocked** at the proxy by default (PR #17 production guard).
   To enable: set `PLEX_ALLOW_WRITES=1` in the environment and restart
-- **There is NO test environment for this app.** The Fusion2Plex Consumer
+- **There is NO test environment for this app.** The Datum Consumer
   Key only authenticates against `connect.plex.com`, not `test.connect.plex.com`.
   Every action you take is against real production data.
 
@@ -126,7 +130,7 @@ Fusion 360 .json (network share, via Autodesk Desktop Connector)
 
 ---
 
-## Plex API access matrix — Fusion2Plex on production
+## Plex API access matrix — Datum on production
 
 Verified empirically against `connect.plex.com` with the Grace tenant.
 
@@ -298,7 +302,7 @@ Sync filter: include only `type != "holder" AND type != "probe"`
 ## Immediate TODO (in priority order)
 
 All items below are mirrored as GitHub Issues — see
-https://github.com/grace-shane/plex-api/issues for live status.
+https://github.com/grace-shane/datum/issues for live status.
 
 1. ~~Fix PlexClient constructor — add api_secret, include header~~ DONE
 2. ~~Find the real Plex tooling endpoint~~ DONE — it's
@@ -346,7 +350,7 @@ https://github.com/grace-shane/plex-api/issues for live status.
 ## Gotchas — read before touching anything
 
 - **EVERY READ HITS PRODUCTION DATA.** There is no test environment for the
-  Fusion2Plex app. Be conscious of rate limits (200/min) and response sizes
+  Datum app. Be conscious of rate limits (200/min) and response sizes
   (`mdm/v1/parts` is 19.6 MB unfiltered).
 - **Writes are blocked at the proxy by default** (PR #17). To enable:
   `PLEX_ALLOW_WRITES=1` env var. Unset it as soon as you're done.
@@ -428,7 +432,7 @@ why endpoints were failing:
   scoping, not subscription. The 403s will resolve once Courtney completes
   tenant routing." — based on a misread of BRIEFING. **Wrong.**
 - **Hypothesis C** (my second correction): "Actually the Plex_API_Reference
-  was right, it IS per-product subscription. The Fusion2Plex app needs more
+  was right, it IS per-product subscription. The Datum app needs more
   product approvals." — based on testing with the wrong key. **Also wrong.**
 
 The actual answer was: **the key value was wrong.** Once the right key
@@ -448,7 +452,7 @@ returned 200. But `tooling/v1/tools`, `manufacturing/v1/operations`, and
 
 These exact paths were in the original `Plex_API_Reference.md` and worked
 for the previous developer with their old credentials on the test
-environment. They don't work for the Fusion2Plex app on production.
+environment. They don't work for the Datum app on production.
 
 There are three possible explanations and we don't yet know which:
 - The URL patterns are different in this product set
@@ -481,6 +485,23 @@ is being used. We should also probably make `bootstrap.py` log when
 ## Session log
 
 Reverse chronological. Each entry: what was the goal, what landed, what's left.
+
+### 2026-04-09 — project rename + key rotation
+
+**Goal:** Give the project a real name before it grows further.
+
+**Done:**
+- Repo renamed `grace-shane/plex-api` → `grace-shane/datum` (GitHub preserves old URL redirects)
+- Plex Developer Portal app renamed `Fusion2Plex` → `Datum`
+- New Consumer Key issued and loaded into `.env.local`
+- All docs updated: README, CLAUDE.md, TODO.md, docs/BRIEFING.md
+- Issue #12 (key rotation) closed
+
+**Next session** (unchanged priority order):
+1. Issue #25 — implement `validate_library.py` per `docs/validate_library_spec.md`
+2. Issue #3 — `build_supply_item_payload` + match-and-upsert
+3. Architectural decisions on #4, #5
+4. Issue #6 — workcenter write support
 
 ### 2026-04-08 — docs reorg + validate_library spec + drift cleanup
 

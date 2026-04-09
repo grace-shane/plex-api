@@ -1,9 +1,9 @@
-# Project Roadmap: Fusion 360 to Plex Sync
+# Project Roadmap: Datum — Fusion 360 → Plex Tooling Sync
 
 This document outlines the step-by-step implementation plan for the Autodesk Fusion 360 tool library to Plex Manufacturing Cloud synchronization project.
 
 > **Live tracking:** All unchecked items below are mirrored as GitHub Issues.
-> See <https://github.com/grace-shane/plex-api/issues> for current status, comments, and blockers.
+> See <https://github.com/grace-shane/datum/issues> for current status, comments, and blockers.
 
 ## Phase 1: API Discovery & Authentication
 
@@ -20,27 +20,27 @@ This document outlines the step-by-step implementation plan for the Autodesk Fus
 
 ## Phase 3: Plex API Source-of-Truth Implementation
 
-- [x] **DONE (PR #21).** Implement API call to retrieve current tooling inventory — `extract_supply_items(client)` in `plex_api.py` hits `inventory/v1/inventory-definitions/supply-items` (2,516 records), filters to `category="Tools & Inserts"` (1,109 records), and writes a CSV snapshot to `outputs/`. Verified live: 30 KB response, 1.4s round trip. → [#2](https://github.com/grace-shane/plex-api/issues/2) *(closed)*
-- [ ] Implement API call to upsert supply-items — `build_supply_item_payload(fusion_tool)` writes to `inventory/v1/inventory-definitions/supply-items` with `supplyItemNumber=<vendor part-id>`. Drafting can begin against the verified read path. → [#3](https://github.com/grace-shane/plex-api/issues/3)
-- [ ] Implement Tool Assembly handling — Plex's supply-item schema is identity-only (no holder linkage). Tool assemblies as a separate concept may not exist in this app's API surface. **Investigate or descope.** → [#4](https://github.com/grace-shane/plex-api/issues/4)
-- [ ] Implement API call to link tools to Routings/Operations — `mdm/v1/operations` exposes only `code, id, inventoryType, type` with no FK to tools. **Linkage may not be possible via API**; may require CSV upload or different approach. → [#5](https://github.com/grace-shane/plex-api/issues/5)
-- [ ] Implement API call to update tooling within the specific Workcenter Document — verified read path is `production/v1/production-definitions/workcenters/{id}`. We have the workcenterCode → Brother Speedio mapping (879, 880). Write shape TBD. → [#6](https://github.com/grace-shane/plex-api/issues/6)
-- [x] **IT blocker resolved.** The Fusion2Plex app on production with the Grace tenant authenticates correctly. The earlier "tenant routing" / "subscription approvals" investigation was a red herring caused by a credential typo. See BRIEFING.md "History of incorrect hypotheses" for the postmortem. → [#1](https://github.com/grace-shane/plex-api/issues/1)
+- [x] **DONE (PR #21).** Implement API call to retrieve current tooling inventory — `extract_supply_items(client)` in `plex_api.py` hits `inventory/v1/inventory-definitions/supply-items` (2,516 records), filters to `category="Tools & Inserts"` (1,109 records), and writes a CSV snapshot to `outputs/`. Verified live: 30 KB response, 1.4s round trip. → [#2](https://github.com/grace-shane/datum/issues/2) *(closed)*
+- [ ] Implement API call to upsert supply-items — `build_supply_item_payload(fusion_tool)` writes to `inventory/v1/inventory-definitions/supply-items` with `supplyItemNumber=<vendor part-id>`. Drafting can begin against the verified read path. → [#3](https://github.com/grace-shane/datum/issues/3)
+- [ ] Implement Tool Assembly handling — Plex's supply-item schema is identity-only (no holder linkage). Tool assemblies as a separate concept may not exist in this app's API surface. **Investigate or descope.** → [#4](https://github.com/grace-shane/datum/issues/4)
+- [ ] Implement API call to link tools to Routings/Operations — `mdm/v1/operations` exposes only `code, id, inventoryType, type` with no FK to tools. **Linkage may not be possible via API**; may require CSV upload or different approach. → [#5](https://github.com/grace-shane/datum/issues/5)
+- [ ] Implement API call to update tooling within the specific Workcenter Document — verified read path is `production/v1/production-definitions/workcenters/{id}`. We have the workcenterCode → Brother Speedio mapping (879, 880). Write shape TBD. → [#6](https://github.com/grace-shane/datum/issues/6)
+- [x] **IT blocker resolved.** The Datum app on production with the Grace tenant authenticates correctly. The earlier "tenant routing" / "subscription approvals" investigation was a red herring caused by a credential typo. See BRIEFING.md "History of incorrect hypotheses" for the postmortem. → [#1](https://github.com/grace-shane/datum/issues/1)
 
 ## Phase 4: Data Mapping & Sync Logic
 
 - [x] Create a mapping definition between Fusion 360 data structures and Plex API payload requirements (Completed in `Fusion360_Tool_Library_Reference.md`).
-- [ ] Implement the core synchronization logic: → [#7](https://github.com/grace-shane/plex-api/issues/7)
+- [ ] Implement the core synchronization logic: → [#7](https://github.com/grace-shane/datum/issues/7)
   - Utilize the Fusion JSON file output as the explicit Source of Truth relative to Plex.
   - Push updates for purchased consumables to the master inventory list.
   - Link those consumables into Tool Assemblies.
   - Ensure those assemblies dynamically flow down to the Routing and then the Job when run in the shop, linking tools directly to manufactured parts.
   - Push final setups to the workcenter documents.
-- [ ] Add basic error handling and logging (e.g., logging successful syncs or failed API calls to a text file on the network share). → [#8](https://github.com/grace-shane/plex-api/issues/8)
+- [ ] Add basic error handling and logging (e.g., logging successful syncs or failed API calls to a text file on the network share). → [#8](https://github.com/grace-shane/datum/issues/8)
 
 ## Phase 5: Automation & Deployment
 
-- [ ] Finalize the synchronization script. → [#9](https://github.com/grace-shane/plex-api/issues/9)
-- [ ] Deploy the script to a server or always-on PC with access to the network share. → [#10](https://github.com/grace-shane/plex-api/issues/10)
-- [ ] Schedule the script to run daily at midnight (e.g., using Windows Task Scheduler). → [#11](https://github.com/grace-shane/plex-api/issues/11)
-- [ ] Rotate the Plex API key before production (previous key is still in git history). → [#12](https://github.com/grace-shane/plex-api/issues/12)
+- [ ] Finalize the synchronization script. → [#9](https://github.com/grace-shane/datum/issues/9)
+- [ ] Deploy the script to a server or always-on PC with access to the network share. → [#10](https://github.com/grace-shane/datum/issues/10)
+- [ ] Schedule the script to run daily at midnight (e.g., using Windows Task Scheduler). → [#11](https://github.com/grace-shane/datum/issues/11)
+- [ ] Rotate the Plex API key before production (previous key is still in git history). → [#12](https://github.com/grace-shane/datum/issues/12)
