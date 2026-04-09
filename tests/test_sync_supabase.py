@@ -174,7 +174,7 @@ class TestSyncFilter:
         result = sync_library("sample", tools, client=fake_supabase)
         assert result["tools"] == 2
 
-        tool_inserts = fake_supabase.inserts_for("fusion2plex_tools")
+        tool_inserts = fake_supabase.inserts_for("tools")
         guids = sorted(r["fusion_guid"] for r in tool_inserts)
         assert guids == ["t1", "t2"]
 
@@ -184,7 +184,7 @@ class TestSyncFilter:
             _tool(guid="h1", type="holder"),
         ]
         sync_library("sample", tools, client=fake_supabase)
-        lib_row = fake_supabase.inserts_for("fusion2plex_libraries")[0]
+        lib_row = fake_supabase.inserts_for("libraries")[0]
         assert lib_row["tool_count"] == 1
 
 
@@ -300,7 +300,7 @@ class TestIdempotency:
         # Each run issues one delete per tool BEFORE inserting its presets.
         deletes = [op for op in fake_supabase.ops if op["kind"] == "delete"]
         assert len(deletes) == 2
-        assert deletes[0]["table"] == "fusion2plex_cutting_presets"
+        assert deletes[0]["table"] == "cutting_presets"
         assert deletes[0]["filters"]["tool_id"].startswith("eq.")
 
 

@@ -1,12 +1,13 @@
 """
 sync_supabase.py
-Fusion 360 JSON → Supabase fusion2plex_* ingest
-Grace Engineering — plex-api project
+Fusion 360 JSON → Supabase ingest
+Grace Engineering — Datum project
 =============================================================
 Reads Fusion 360 tool-library JSON files, applies the eight
 normalization rules documented in the Supabase Schema Design
-(Notion · 2026-04-08), and upserts the three ``fusion2plex_*``
-tables in the bulletforge Supabase project.
+(Notion · 2026-04-08), and upserts the three core tables
+(``libraries``, ``tools``, ``cutting_presets``) in the dedicated
+``datum`` Supabase project.
 
 Pipeline
 --------
@@ -31,7 +32,7 @@ Pipeline
 
 The module is pure data — it does not touch Plex. Downstream,
 ``build_supply_item_payload`` (#3) will read normalized rows from
-``fusion2plex_tools`` and push them to Plex.
+the ``tools`` table and push them to Plex.
 """
 from __future__ import annotations
 
@@ -223,7 +224,7 @@ def _maybe_str(value: Any) -> str | None:
 # ─────────────────────────────────────────────
 def build_tool_row(tool: dict) -> dict:
     """
-    Map one raw Fusion tool dict to a ``fusion2plex_tools`` row dict.
+    Map one raw Fusion tool dict to a ``tools`` row dict.
     Does NOT include ``library_id`` — caller fills that in after the
     library row has been upserted and has a real id.
 
@@ -419,7 +420,7 @@ def sync_library(
         "ingested_at": datetime.now(timezone.utc).isoformat(),
     }
     lib_result = client.upsert(
-        "fusion2plex_libraries",
+        "libraries",
         library_row,
         on_conflict="library_name",
     )
@@ -452,7 +453,7 @@ def sync_library(
         return {"tools": 0, "presets": 0}
 
     tools_result = client.upsert(
-        "fusion2plex_tools",
+        "tools",
         tool_rows,
         on_conflict="fusion_guid",
     )
@@ -469,12 +470,12 @@ def sync_library(
         tool_id = guid_to_id[guid]
         # Flush existing presets for this tool so a re-sync never double-inserts.
         client.delete(
-            "fusion2plex_cutting_presets",
+            "cutting_presets",
             filters={"tool_id": f"eq.{tool_id}"},
         )
         preset_rows = build_preset_rows(raw, tool_id=tool_id)
         if preset_rows:
-            client.insert("fusion2plex_cutting_presets", preset_rows)
+            client.insert("cutting_presets", preset_rows)
             total_presets += len(preset_rows)
 
     log.info("Presets inserted: %d rows for %s", total_presets, library_name)

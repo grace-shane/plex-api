@@ -78,8 +78,8 @@ class TestTableUrl:
         monkeypatch.setenv("SUPABASE_SERVICE_ROLE_KEY", "k")
         client = SupabaseClient()
         assert (
-            client._table_url("fusion2plex_tools")
-            == "https://x.supabase.co/rest/v1/fusion2plex_tools"
+            client._table_url("tools")
+            == "https://x.supabase.co/rest/v1/tools"
         )
 
 
@@ -92,7 +92,7 @@ class TestDeleteSafety:
         monkeypatch.setenv("SUPABASE_SERVICE_ROLE_KEY", "k")
         client = SupabaseClient()
         with pytest.raises(ValueError, match="at least one filter"):
-            client.delete("fusion2plex_tools", filters={})
+            client.delete("tools", filters={})
 
 
 # ─────────────────────────────────────────────
@@ -162,12 +162,12 @@ class TestUpsertRequestShape:
 
         with patch.object(client._session, "post", side_effect=fake_post):
             client.upsert(
-                "fusion2plex_tools",
+                "tools",
                 {"fusion_guid": "abc", "vendor": "V"},
                 on_conflict="fusion_guid",
             )
 
-        assert captured["url"].endswith("/rest/v1/fusion2plex_tools")
+        assert captured["url"].endswith("/rest/v1/tools")
         assert "resolution=merge-duplicates" in captured["headers"]["Prefer"]
         assert captured["params"] == {"on_conflict": "fusion_guid"}
         # Body is JSON-serialized list

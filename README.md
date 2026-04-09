@@ -16,7 +16,7 @@ The React UI reads from Supabase; Plex gets only what its schema can accept.
 | **Plex tenant** | `58f781ba-1691-4f32-b1db-381cdb21300c` (Grace Engineering) |
 | **Tooling endpoint** | `inventory/v1/inventory-definitions/supply-items` filtered to `category="Tools & Inserts"` (1,109 records) |
 | **Workcenters** | `production/v1/production-definitions/workcenters` (143 records, including 21 mills mapping directly to Brother Speedio FTP IPs) |
-| **Supabase** | `bulletforge` project (us-east-2), 7 tables prefixed `fusion2plex_` — tool libraries, holders, tools (with `raw_json`), assemblies, workcenter assignments, suppliers cache, sync log |
+| **Supabase** | dedicated `datum` project (us-east-2), 3 tables — `libraries`, `tools`, `cutting_presets` |
 | **Phase** | **Phase B complete** — `validate_library.py` pre-sync gate landed (#25). Phase A-Python (Supabase upsert layer) is next. |
 | **Tests** | 215 pytest tests, all green. CI on PRs to master via GitHub Actions. Branch protection requires the check to pass. |
 

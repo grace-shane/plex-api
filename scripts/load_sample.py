@@ -2,8 +2,9 @@
 scripts/load_sample.py
 Smoke test — ingest BROTHER SPEEDIO ALUMINUM.json into Supabase
 ================================================================
-Loads the committed sample Fusion library file into the
-``fusion2plex_*`` tables and prints a row-count report.
+Loads the committed sample Fusion library file into the Datum
+``libraries``/``tools``/``cutting_presets`` tables and prints a
+row-count report.
 
 Run from the repo root::
 
@@ -66,7 +67,7 @@ def main() -> int:
         print(f"ERROR: {e}", file=sys.stderr)
         print(
             "\nAdd these to .env.local:\n"
-            "  SUPABASE_URL=https://uhmpkprcxrajbtkvqmwg.supabase.co\n"
+            "  SUPABASE_URL=https://<your-datum-project-ref>.supabase.co\n"
             "  SUPABASE_SERVICE_ROLE_KEY=<service role JWT>\n",
             file=sys.stderr,
         )

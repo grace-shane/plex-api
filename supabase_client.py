@@ -1,7 +1,7 @@
 """
 supabase_client.py
-Thin Supabase REST client for the fusion2plex_* ingest layer
-Grace Engineering — plex-api project
+Thin Supabase REST client for the Datum ingest layer
+Grace Engineering — Datum project
 =============================================================
 Minimal PostgREST wrapper that talks to Supabase over plain HTTP.
 Deliberately avoids the `supabase-py` SDK because its transitive
