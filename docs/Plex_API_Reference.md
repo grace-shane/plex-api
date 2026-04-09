@@ -6,6 +6,13 @@ This reference document synthesizes the discoveries from preliminary API testing
 
 *Note: Grace Engineering runs Plex Classic, MES+ enabled, supporting Prime Archery and Montana Rifle Company.*
 
+> **Companion: Postman collections.** Every endpoint documented in
+> §3 below has a matching request in the **Plex API — Datum** Postman
+> collection (see [`Postman_Collections.md`](./Postman_Collections.md)
+> for the full catalog and naming convention). Postman is the
+> recommended way to explore endpoints by hand; this file is the
+> authoritative reference for what each endpoint actually returns.
+
 ---
 
 ## 2. Authentication & Headers

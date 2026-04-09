@@ -7,8 +7,9 @@ Read this first, then read `plex_api.py`, `tool_library_loader.py`, and
 > **File layout note.** As of 2026-04-08, all long-form docs live under
 > `docs/`. This file is `docs/BRIEFING.md`, not `./BRIEFING.md`. Siblings:
 > `docs/Plex_API_Reference.md`, `docs/Fusion360_Tool_Library_Reference.md`,
-> `docs/validate_library_spec.md`. `README.md`, `CLAUDE.md`, and `TODO.md`
-> are still at the repo root. See PR #24 for the move.
+> `docs/validate_library_spec.md`, `docs/Postman_Collections.md`.
+> `README.md`, `CLAUDE.md`, and `TODO.md` are still at the repo root. See
+> PR #24 for the move.
 
 > **Read the "History of incorrect hypotheses" section at the bottom of this
 > file before changing anything credential- or tenant-related.** It documents

@@ -17,16 +17,24 @@ repository. **Read these files in this order before doing anything**:
    — Fusion JSON schema and field-to-Plex mapping. Read this before
    writing anything that consumes the local Fusion library files.
 
-4. **[`TODO.md`](./TODO.md)** — project roadmap, links to GitHub Issues
+4. **[`docs/Postman_Collections.md`](./docs/Postman_Collections.md)** —
+   the two Postman collections (Plex API — Datum and Fusion 360 Tool
+   Libraries — Datum), including the full endpoint catalog with
+   verified-vs-probe status, the `[NS]` naming convention, the safe
+   write workflow, and how to add new requests via the Postman MCP.
+   Read this before touching the collections or before exploring a new
+   Plex namespace from the Postman UI.
+
+5. **[`TODO.md`](./TODO.md)** — project roadmap, links to GitHub Issues
    for live status.
 
-5. **Datum Notion page** — https://www.notion.so/Grace-Engineering-Fusion2Plex-33c3160a3abf81f1aac0e58101952be5
+6. **Datum Notion page** — https://www.notion.so/Grace-Engineering-Fusion2Plex-33c3160a3abf81f1aac0e58101952be5
    — **read at the start of every session.** Current State block tells
    you phase, next action, and test count. End each session by updating
    that block + appending one line to the Decision Log. See the
    "Notion pages" section in `docs/BRIEFING.md` for details.
 
-6. **Supabase staging layer** — Fusion JSON is ingested into the
+7. **Supabase staging layer** — Fusion JSON is ingested into the
    `libraries`, `tools`, and `cutting_presets` tables in the dedicated
    `datum` Supabase project (us-east-2) before anything pushes to Plex.
    Schema spec: [Notion · Supabase Schema Design](https://www.notion.so/33c3160a3abf814c885cc174cda76d17).
