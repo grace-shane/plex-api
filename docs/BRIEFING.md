@@ -147,40 +147,68 @@ Plex uses two URL shapes for read endpoints:
 
 ### Verified working endpoints
 
+Record counts are as of **2026-04-09** unless noted. For the full schema
+of every resource + cross-reference discussion, see
+[`docs/Plex_API_Reference.md`](./Plex_API_Reference.md) §3.
+
 | Path | Records | What it is |
-|---|---|---|
-| `mdm/v1/tenants` | 1 | Grace tenant only |
-| `mdm/v1/parts` | 16,913 | **Finished products + raw materials only.** types: Finished Good, Raw Material, Sub Assembly. Tools are NOT here. |
-| `mdm/v1/suppliers` | — | Supplier master |
-| `mdm/v1/customers` | — | |
-| `mdm/v1/contacts` | — | |
-| `mdm/v1/buildings` | — | |
-| `mdm/v1/employees` | — | |
-| `mdm/v1/operations` | 122 | Process steps. Minimal schema. No FK to tools/parts/routings — see Gotchas. |
-| `purchasing/v1/purchase-orders` | — | 44 MB unfiltered |
-| `production/v1/production-definitions/workcenters` | 143 | Includes 21 MILLs. **Codes 879/880 = Brother Speedio FTP IPs.** |
-| `inventory/v1/inventory-definitions/supply-items` | 2,516 | **WHERE TOOLS LIVE.** Filter `category="Tools & Inserts"` for the 1,109 cutting tools and inserts. |
-| `inventory/v1/inventory-definitions/locations` | — | Inventory location master |
+|---|---:|---|
+| `mdm/v1/tenants` | 1 | Grace tenant only. Auth canary. |
+| `mdm/v1/parts` | 16,921 | +8 since 2026-04-07. **Finished products + raw materials only.** Tools are NOT here. |
+| `mdm/v1/parts/{id}` | — | Per-id verified 2026-04-09. Same fields as list. |
+| `mdm/v1/suppliers` | 1,575 | Supplier master. Has `parentSupplierId` self-FK. Mixed material + carrier types. |
+| `mdm/v1/suppliers/{id}` | — | Per-id verified 2026-04-09. |
+| `mdm/v1/customers` | 109 | 35-field schema. FKs to employees, contacts, suppliers. |
+| `mdm/v1/customers/{id}` | — | Per-id verified 2026-04-09. |
+| `mdm/v1/contacts` | 299 | |
+| `mdm/v1/buildings` | 4 | Provides `buildingCode`/`buildingId` referenced by workcenters. |
+| `mdm/v1/employees` | 641 | UUIDs here appear as `createdById`/`modifiedById` across every resource. |
+| `mdm/v1/operations` | 122 | Process steps. Minimal schema (4 fields). No FK to tools/parts/routings — see Gotchas. |
+| `mdm/v1/operations/{id}` | — | Per-id verified 2026-04-09. |
+| `purchasing/v1/purchase-orders` | — | 44.2 MB unfiltered. `?updatedAfter` filter confirmed silent no-op 2026-04-09. |
+| `production/v1/production-definitions/workcenters` | 143 | Includes 21 MILLs. **Codes 879/880 = Brother Speedio FTP IPs.** ⚠️ Primary key is `workcenterId`, not `id`. |
+| `production/v1/production-definitions/workcenters/{id}` | — | Per-id verified 2026-04-09. |
+| `inventory/v1/inventory-definitions/supply-items` | 2,516 | **WHERE TOOLS LIVE.** Filter `category="Tools & Inserts"` for the 1,109 cutting tools. **⚠️ No supplier FK, no cross-references of any kind — identity-only. See §3.5 of Plex_API_Reference.md.** |
+| `inventory/v1/inventory-definitions/supply-items/{id}` | — | Per-id verified 2026-04-09. Same 7 fields, no hidden detail. |
+| `inventory/v1/inventory-definitions/locations` | 1,270 | Inventory location master. Not referenced from supply-item. |
+| `scheduling/v1/jobs` | TBD | **NEW — discovered 2026-04-09.** Returns 200 but ~15.8s response time (large body). Schema TBD. Potentially relevant to #5 if jobs carry tool references. |
 
 ### Where tooling data actually lives
 
 Cutting tools and inserts are **`inventory/v1/inventory-definitions/supply-items`**
 records with `category="Tools & Inserts"` and `group="Machining"`. There are
-already 1,109 tools/inserts tracked in Plex Grace. The schema is:
+already 1,109 tools/inserts tracked in Plex Grace (verified 2026-04-09).
+The schema is just 7 fields:
 
   - `category` (e.g. "Tools & Inserts")
-  - `description`
+  - `description` (free-text, human-readable)
   - `group` (e.g. "Machining", "Tool Room")
-  - `id` (UUID)
-  - `inventoryUnit`
-  - `supplyItemNumber` (vendor part number — the dedup key)
-  - `type` (e.g. SUPPLY, OFFICE)
+  - `id` (UUID — Plex primary key)
+  - `inventoryUnit` (e.g. "Ea")
+  - `supplyItemNumber` (**legacy: free-text, not vendor part numbers**)
+  - `type` (e.g. "SUPPLY")
 
-This is **identity-only**: vendor + part number + description. Geometry
-(DC, OAL, NOF, holder) stays in Fusion as the source of truth — Plex
-stores the vendor reference and the inventory tracking. The Fusion sync
-will write to `inventory/v1/inventory-definitions/supply-items`, not to
-`mdm/v1/parts` (which is for finished products).
+**⚠️ CRITICAL: supply-items have NO cross-references to any other resource (verified 2026-04-09).** This is identity-only — Plex stores no link from a tool to:
+
+- its vendor (no `supplierId`)
+- its physical location (no `locationId`)
+- the part it helps produce (no `partId`)
+- the machine it belongs to (no `workcenterId`)
+- the operation it performs (no `operationId`)
+
+**Implication for the Datum architecture:** vendor/supplier data for tools MUST live in Supabase as the source of truth. The Fusion JSON carries `vendor` and `product-id` → those get written to the `tools` table in Supabase → and `build_supply_item_payload()` (issue #3) constructs the Plex POST body using only the 7 identity fields listed above. Plex never learns who the vendor is, because Plex doesn't model that relationship for tools.
+
+This kills the "use PO lines as a back-channel for the vendor link" hypothesis that was implicit earlier — `purchasing/v1/purchase-orders-lines` returned 404 on 2026-04-09.
+
+The Fusion sync will write to `inventory/v1/inventory-definitions/supply-items`, not to `mdm/v1/parts` (which is for finished products).
+
+**Sample existing `supplyItemNumber` values captured 2026-04-09** (confirming the legacy free-text nature of these records):
+
+- `"Insert  HM90 AXCR 150508 IC28"` (description, not a part number)
+- `"Screw Indexable Face Mill F75"`
+- `"Tap #8-32 H3 Spiral Point"`
+
+Fusion writes will use clean vendor part numbers like `"990910"`, so expect ~100% INSERTs with zero collisions on first sync.
 
 ### Workcenter ↔ machine mapping
 
@@ -486,6 +514,35 @@ is being used. We should also probably make `bootstrap.py` log when
 ## Session log
 
 Reverse chronological. Each entry: what was the goal, what landed, what's left.
+
+### 2026-04-09 — Postman buildout + connectivity sweep + supply-item cross-ref finding
+
+**Goal:** Build out the Postman collections to full known scope, then actually run a connectivity sweep to stop hedging about "verified vs unverified" and get ground truth on every endpoint.
+
+**Done:**
+
+- **Postman collections expanded** (PR #38): Plex collection 12 → 33 requests + `[SCHED] List Jobs` + 2 new `[PROBE]` entries = 36 total. Fusion collection 10 → 14 requests. Organized via `[NS]` name prefixes (Postman MCP minimal tier has no folder creation). New `docs/Postman_Collections.md` as the day-to-day reference.
+- **Connectivity sweep** (23 requests, 2026-04-09): 18/23 returned 200, 5/23 returned 404, **zero 401s**. Clean ground truth on the full subscription scope.
+- **Get-by-ID chain test** (6 requests): all 6 per-id endpoints work. **Every per-id view returns exactly the same fields as the list view** — no hidden detail on any resource.
+- **Fresh record counts captured** for every list endpoint (see §3 table above).
+- **Full field schemas captured** for every resource (see Plex_API_Reference.md §3).
+- **New endpoint discovered:** `scheduling/v1/jobs` returns 200 (15.8s response — large body, schema TBD). Potentially relevant to issue #5.
+- **Critical architectural finding:** `inventory/v1/inventory-definitions/supply-items` has **NO cross-references to any other resource**. Supply-items are identity-only — Plex does not model tool→vendor, tool→location, tool→part, tool→workcenter, or tool→operation. This resolves the question the user asked about "how do we get the supplier from a supply-item": **you can't, not from Plex alone.** Vendor data has to live in Supabase as the source of truth. (Also killed the "use PO lines as a back-channel" hypothesis — `purchasing/v1/purchase-orders-lines` returns 404.)
+- **Filter no-op confirmed on POs:** unfiltered and `?updatedAfter=2025-01-01` both returned byte-identical 44.2 MB responses. The filter is silently ignored (same behavior as `?limit=N`).
+- **Postman descriptions updated** for all 23 sweep endpoints + the 6 per-id endpoints + the 5 `[PROBE]` entries. Historical dates preserved (2026-04-07 initial / 2026-04-09 re-verification).
+
+**Key facts for the next session:**
+
+- The legacy `PLEX_API_KEY=uP4G...` stale shell env var is **still set** in `HKCU\Environment`. It shadows `.env.local` due to `bootstrap.setdefault()` semantics. User cannot permanently unset it in this environment — every session must `unset PLEX_API_KEY && export PLEX_API_KEY='<current>'` before running anything that hits Plex. Document this as a project foot-gun (it's already in History §4 but the env var never got cleaned up).
+- This worktree (`charming-hamilton`) does **not** have a `.env.local`. Per the `Bootstrap.py worktree foot-gun` memory, every worktree needs its own until issue #36 lands.
+- The `scheduling/v1/jobs` endpoint is the highest-value follow-up — if its records carry tool references, we get the operation→tool mapping that issue #5 is blocked on without needing the `manufacturing/v1/routings` endpoint to ever become available.
+
+**What's left:**
+
+1. Deep-dive `scheduling/v1/jobs` — pull once, sample shape, document fields. Look specifically for `toolId`, `supplyItemId`, `workcenterId`, `operationId` references.
+2. Issue #3 — `build_supply_item_payload` reading from Supabase `tools` table, now with full confidence that Plex never needs to know about vendors.
+3. Issue #5 / #4 — architectural decisions remain blocked on product questions (not code questions).
+4. Clean up the stale shell `PLEX_API_KEY=uP4G...` when the user gets admin access.
 
 ### 2026-04-09 — project rename + key rotation
 

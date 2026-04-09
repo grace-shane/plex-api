@@ -30,6 +30,8 @@ Both collections live in Shane's Grace Engineering Postman workspace.
 | **Plex API — Datum** | `75b28dc4-9c73-4e27-90d0-1539777f52ea` | `53648712-75b28dc4-9c73-4e27-90d0-1539777f52ea` |
 | **Fusion 360 Tool Libraries — Datum** | `8a9b5ce6-f541-4301-b15d-fd95970df0e8` | `53648712-8a9b5ce6-f541-4301-b15d-fd95970df0e8` |
 
+**Request counts as of 2026-04-09:** Plex collection has **36 requests** (34 reads + new `[SCHED] List Jobs` + expanded `[PROBE]` group with 2 new entries) across 8 `[NS]` prefix groups. Fusion collection has 14 requests across 4 groups.
+
 The bare collection ID (no owner prefix) is the form most Postman MCP
 endpoints want. The UID form (with the `53648712-` prefix) is what
 `getCollection`, `getCollections`, etc. return as a stable handle.
@@ -107,6 +109,13 @@ Postman to see the groups together.
 All paths are relative to `{{base_url}}` which resolves to
 `https://connect.plex.com` from the environment.
 
+> **Verification state (as of 2026-04-09).** 23 GET requests were run in
+> the 2026-04-09 connectivity sweep + 6 Get-by-ID requests in the chain
+> test. **18/23 returned 200, 5/23 returned 404, all 6 per-id endpoints
+> returned 200.** Zero 401s. Record counts and schemas in the tables
+> below come from that sweep. `[WRITE]` requests are NOT tested (per
+> user instruction, writes only run on explicit approval).
+
 ### `[AUTH]` — Auth & Diagnostics
 
 | Request | Method | Path | Status |
@@ -126,45 +135,53 @@ this matters.
 
 ### `[MDM]` — Master Data
 
+All records verified 2026-04-09. Per-id endpoints all return the exact same fields as the list view — no hidden detail.
+
 | Request | Method | Path | Verified | Notes |
 |---|---|---|---|---|
-| List Parts — Unfiltered | GET | `/mdm/v1/parts` | ✅ 16,913 records | **19.6 MB unfiltered.** Tools are NOT here. |
-| List Parts — Active only | GET | `/mdm/v1/parts?status=Active` | ✅ | Only filter that actually works on this endpoint. 19.6 MB → 7.8 MB. |
-| Get Part by ID | GET | `/mdm/v1/parts/:partId` | ✅ | Same fields as list view. |
-| List Suppliers | GET | `/mdm/v1/suppliers` | ✅ ~708 KB | `supplierId` is a UUID, not a code. Cached by `validate_library --use-api` for VENDOR_NOT_IN_PLEX. |
-| Get Supplier by ID | GET | `/mdm/v1/suppliers/:supplierId` | ⚠️ Pattern unverified | List view IS verified. |
-| List Customers | GET | `/mdm/v1/customers` | ✅ ~96 KB | |
-| Get Customer by ID | GET | `/mdm/v1/customers/:customerId` | ⚠️ Pattern unverified | |
-| List Contacts | GET | `/mdm/v1/contacts` | ✅ ~202 KB | |
-| List Buildings | GET | `/mdm/v1/buildings` | ✅ ~1.2 KB | Provides the `buildingCode`/`buildingId` from workcenters. |
-| List Employees | GET | `/mdm/v1/employees` | ✅ ~272 KB | |
-| List Operations | GET | `/mdm/v1/operations` | ✅ 122 records | Minimal schema — no FK to tools/parts/routings. |
-| Get Operation by ID | GET | `/mdm/v1/operations/:operationId` | ✅ | Same fields as list view. |
+| List Parts — Unfiltered | GET | `/mdm/v1/parts` | ✅ **16,921** records | **19.6 MB.** +8 since 2026-04-07. Tools are NOT here. 17 fields. |
+| List Parts — Active only | GET | `/mdm/v1/parts?status=Active` | ✅ 7.8 MB | Only filter that actually works on this endpoint. |
+| Get Part by ID | GET | `/mdm/v1/parts/:partId` | ✅ verified 2026-04-09 | Same 17 fields as list view. |
+| List Suppliers | GET | `/mdm/v1/suppliers` | ✅ **1,575** records / 709 KB | 16 fields. `parentSupplierId` self-FK. Mixes material suppliers + carriers. Cached by `validate_library --use-api`. |
+| Get Supplier by ID | GET | `/mdm/v1/suppliers/:supplierId` | ✅ verified 2026-04-09 | Same 16 fields. |
+| List Customers | GET | `/mdm/v1/customers` | ✅ **109** records / 96 KB | 35 fields. FKs to employees, contacts, suppliers. |
+| Get Customer by ID | GET | `/mdm/v1/customers/:customerId` | ✅ verified 2026-04-09 | Same 35 fields. |
+| List Contacts | GET | `/mdm/v1/contacts` | ✅ **299** records / 202 KB | |
+| List Buildings | GET | `/mdm/v1/buildings` | ✅ **4** records / 1.2 KB | Provides `buildingCode`/`buildingId` referenced by workcenters. |
+| List Employees | GET | `/mdm/v1/employees` | ✅ **641** records / 272 KB | UUIDs appear as `createdById`/`modifiedById` across every resource. |
+| List Operations | GET | `/mdm/v1/operations` | ✅ **122** records | Minimal 4-field schema — no FK to tools/parts/routings. Issue #5 blocker. |
+| Get Operation by ID | GET | `/mdm/v1/operations/:operationId` | ✅ verified 2026-04-09 | Same 4 fields. |
 
 ### `[INV]` — Inventory
 
 | Request | Method | Path | Verified | Notes |
 |---|---|---|---|---|
-| List Supply Items — All | GET | `/inventory/v1/inventory-definitions/supply-items` | ✅ 2,516 records | Full unfiltered, ~614 KB. |
-| List Supply Items — Tools & Inserts | GET | `/inventory/v1/inventory-definitions/supply-items?category=Tools%20%26%20Inserts` | ✅ 1,109 after client filter | **Target endpoint for the Fusion sync.** Has a test script asserting array shape and `category="Tools & Inserts"`. |
-| Get Supply Item by ID | GET | `/inventory/v1/inventory-definitions/supply-items/:supplyItemId` | ⚠️ Pattern unverified | |
-| List Inventory Locations | GET | `/inventory/v1/inventory-definitions/locations` | ✅ ~279 KB | |
+| List Supply Items — All | GET | `/inventory/v1/inventory-definitions/supply-items` | ✅ **2,516** records | Full unfiltered, ~614 KB. |
+| List Supply Items — Tools & Inserts | GET | `/inventory/v1/inventory-definitions/supply-items?category=Tools%20%26%20Inserts` | ✅ **1,109** after client filter | **Target endpoint for the Fusion sync.** ⚠️ **No supplier FK, no cross-refs of any kind — see §4.5.** Has a test script asserting schema. |
+| Get Supply Item by ID | GET | `/inventory/v1/inventory-definitions/supply-items/:supplyItemId` | ✅ verified 2026-04-09 | Same 7 fields as list view. No hidden detail. |
+| List Inventory Locations | GET | `/inventory/v1/inventory-definitions/locations` | ✅ **1,270** records / 279 KB | Not cross-referenced from supply-item. |
 
 ### `[PROD]` — Production
 
 | Request | Method | Path | Verified | Notes |
 |---|---|---|---|---|
-| List Workcenters | GET | `/production/v1/production-definitions/workcenters` | ✅ 143 records | Includes 21 MILLs. Test script logs the count. |
-| Get Workcenter by ID — generic | GET | `/production/v1/production-definitions/workcenters/:workcenterId` | ✅ | |
-| Get Workcenter — Brother Speedio 879 | GET | `/production/v1/production-definitions/workcenters/0b6cf62b-2809-4d3d-ab24-369cd0171f62` | ✅ | workcenterCode `879`, FTP `192.168.25.79`. |
-| Get Workcenter — Brother Speedio 880 | GET | `/production/v1/production-definitions/workcenters/8e262d5a-3ce8-4597-8726-d2b979b1b6b7` | ✅ | workcenterCode `880`, FTP `192.168.25.80`. |
+| List Workcenters | GET | `/production/v1/production-definitions/workcenters` | ✅ **143** records | Includes 21 MILLs. ⚠️ Primary key is `workcenterId`, not `id`. Test script logs the count. |
+| Get Workcenter by ID — generic | GET | `/production/v1/production-definitions/workcenters/:workcenterId` | ✅ verified 2026-04-09 | Same 11 fields as list view. |
+| Get Workcenter — Brother Speedio 879 | GET | `/production/v1/production-definitions/workcenters/0b6cf62b-2809-4d3d-ab24-369cd0171f62` | ✅ verified 2026-04-09 | workcenterCode `879`, FTP `192.168.25.79`. |
+| Get Workcenter — Brother Speedio 880 | GET | `/production/v1/production-definitions/workcenters/8e262d5a-3ce8-4597-8726-d2b979b1b6b7` | ✅ verified 2026-04-09 | workcenterCode `880`, FTP `192.168.25.80`. |
 
 ### `[PURCH]` — Purchasing
 
 | Request | Method | Path | Verified | Notes |
 |---|---|---|---|---|
-| List Purchase Orders — Unfiltered | GET | `/purchasing/v1/purchase-orders` | ✅ | **44 MB unfiltered. Be careful.** |
-| List Purchase Orders — Filtered (template) | GET | `/purchasing/v1/purchase-orders?updatedAfter=...&supplier=...` | ⚠️ Filter effectiveness unverified | Use as a probe template. |
+| List Purchase Orders — Unfiltered | GET | `/purchasing/v1/purchase-orders` | ✅ 44.2 MB | Full PO history. **Be careful — 44 MB every call.** |
+| List Purchase Orders — Filtered (template) | GET | `/purchasing/v1/purchase-orders?updatedAfter=...` | 🚫 **Filter is a silent no-op** (verified 2026-04-09) | Both filtered and unfiltered returned byte-identical 44.2 MB. Kept as a probe template for future Plex behavior changes. |
+
+### `[SCHED]` — Scheduling (new 2026-04-09)
+
+| Request | Method | Path | Verified | Notes |
+|---|---|---|---|---|
+| List Jobs | GET | `/scheduling/v1/jobs` | ✅ 200 (2026-04-09) | **New endpoint discovered during the 2026-04-09 sweep.** ~15.8s response (large body). Schema, record count, and FK structure all TBD. Potentially relevant to issue #5 if jobs carry tool references — would give the operation→tool mapping for free. |
 
 ### `[WRITE]` — Mutating requests
 
@@ -194,20 +211,54 @@ this matters.
 
 ### `[PROBE]` — Unverified namespaces
 
-| Request | Method | Path | Last Status |
-|---|---|---|---|
-| tooling/v1/tools | GET | `/tooling/v1/tools` | 404 (2026-04-07) |
-| tooling/v1/tool-assemblies | GET | `/tooling/v1/tool-assemblies` | 404 (2026-04-07) |
-| manufacturing/v1/routings | GET | `/manufacturing/v1/routings` | 404 (2026-04-07) |
-| quality/v1/inspections | GET | `/quality/v1/inspections` | Never tested |
-| sales/v1/sales-orders | GET | `/sales/v1/sales-orders` | Never tested |
+**All probes returned 404 on 2026-04-09.** Kept so future sessions know they've been checked.
+
+| Request | Method | Path | First checked | Last check |
+|---|---|---|---|---|
+| tooling/v1/tools | GET | `/tooling/v1/tools` | 2026-04-07 | **2026-04-09 — still 404** |
+| tooling/v1/tool-assemblies | GET | `/tooling/v1/tool-assemblies` | 2026-04-07 | **2026-04-09 — still 404** |
+| manufacturing/v1/routings | GET | `/manufacturing/v1/routings` | 2026-04-07 | **2026-04-09 — still 404** |
+| quality/v1/inspections | GET | `/quality/v1/inspections` | 2026-04-09 | **2026-04-09 — 404 (first check)** |
+| sales/v1/sales-orders | GET | `/sales/v1/sales-orders` | 2026-04-09 | **2026-04-09 — 404 (first check)** |
+| inventory/v1/on-hand | GET | `/inventory/v1/on-hand` | 2026-04-09 | **2026-04-09 — 404 (first check)** — would have given stock levels |
+| purchasing/v1/purchase-orders-lines | GET | `/purchasing/v1/purchase-orders-lines` | 2026-04-09 | **2026-04-09 — 404 (first check)** — would have enabled supply-item → supplier back-channel |
 
 The `tooling/v1/*` and `manufacturing/v1/*` paths were in the original
 pre-Datum API reference and worked for the previous developer on a
 different Plex deployment, but the Datum app subscription returns 404 for
-all of them. They're kept here so that if the subscription set ever
-changes, we can rerun the probes and detect it. See `docs/BRIEFING.md`
-History §3.
+all of them. `inventory/v1/on-hand` and `purchasing/v1/purchase-orders-lines`
+were added 2026-04-09 after being probed while investigating how to
+derive vendor/stock data for supply-items (neither exists).
+
+All are kept here so that if the subscription set ever changes, we can
+rerun the probes and detect it. See `docs/BRIEFING.md` History §3 and
+`docs/Plex_API_Reference.md` §3 "Probed — returned 404".
+
+### §4.5 — Supply-item cross-reference map (the critical finding)
+
+Re-verified 2026-04-09 via the Get-by-ID chain test:
+
+**`inventory/v1/inventory-definitions/supply-items` has NO cross-references to any other resource.** The record is identity-only, 7 fields:
+
+```
+category, description, group, id, inventoryUnit, supplyItemNumber, type
+```
+
+Specifically — this resource does NOT have:
+
+| Missing FK | Would have given us |
+|---|---|
+| `supplierId` / `preferredSupplierId` | Who to buy the tool from. **You cannot get a tool's vendor from Plex alone.** |
+| `locationId` / `warehouseId` | Where the tool physically is. |
+| `partId` | Which finished product this tool helps produce. |
+| `workcenterId` | Which machine the tool is assigned to. |
+| `operationId` | Which operation/process step the tool is used for. |
+
+**Consequence for Datum:** vendor data for tools MUST live in Supabase as the source of truth. The Fusion sync writes vendor + product-id + description + geometry to `libraries`/`tools`/`cutting_presets` in Supabase; `build_supply_item_payload()` (issue #3) then constructs the Plex POST body from only the 7 identity fields. Plex never learns who the vendor is — and that's fine, because nothing in Plex depends on that information.
+
+Also killed the "use PO lines as a back-channel for the vendor link" hypothesis — `purchasing/v1/purchase-orders-lines` returned 404 on 2026-04-09. There is no sub-resource for PO line items; they must be embedded in the parent PO records (verification pending).
+
+For the full cross-reference map of *which* relationships DO exist in Plex (e.g. customer→employee, workcenter→building, supplier→parentSupplier), see the Notion page **"Plex Data Model — Cross-References"** under the Datum project page.
 
 ---
 

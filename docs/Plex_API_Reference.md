@@ -38,9 +38,22 @@ X-Plex-Connect-Api-Key: <your_consumer_key>
 
 > [!IMPORTANT]
 > All values below were verified empirically against `connect.plex.com`
-> (production) on **2026-04-07** with the `Fusion2Plex` Consumer Key on the
-> Grace tenant (`58f781ba-1691-4f32-b1db-381cdb21300c`). Reproduce by
-> running the diagnostic at `/api/diagnostics/tenant` from the local UI.
+> (production) on the Grace tenant
+> (`58f781ba-1691-4f32-b1db-381cdb21300c`). Reproduce by running the
+> diagnostic at `/api/diagnostics/tenant` from the local UI, or by
+> running the Postman `[AUTH] List All Tenants — Auth Canary` request.
+>
+> **Verification history:**
+>
+> - **2026-04-07** — first full sweep with the `Fusion2Plex` Consumer
+>   Key. Discovered that tools live at `inventory/v1/inventory-definitions/supply-items`
+>   (not `tooling/v1/tools` as earlier docs claimed).
+> - **2026-04-09** — re-verified with the rotated `Datum` Consumer Key
+>   after the project rename. 23-request connectivity sweep + 6-request
+>   Get-by-ID chain test. Captured full field schemas + discovered that
+>   **supply-items have no foreign key to suppliers, parts, locations,
+>   or any other resource** (see §3.5 below). Also discovered the
+>   `scheduling/v1/jobs` endpoint (new — not in any earlier doc).
 
 ### URL pattern convention
 
@@ -52,6 +65,9 @@ Plex uses two URL shapes for read endpoints:
    Example: `production/v1/production-definitions/workcenters`,
    `inventory/v1/inventory-definitions/supply-items`,
    `inventory/v1/inventory-definitions/locations`
+3. **Flat with sub-namespace** (new 2026-04-09): `<namespace>/v1/<resource>`
+   — the `scheduling/v1/jobs` endpoint uses the first pattern but lives
+   under a namespace that wasn't previously catalogued.
 
 Both patterns are used in production. The bare `<namespace>/v1` root
 typically returns 404 (no resource at the root); the actual data lives
@@ -59,23 +75,86 @@ one level deeper.
 
 ### Verified working endpoints
 
-| Status | Path | Records | Notes |
-|---|---|---|---|
-| **200** | `mdm/v1/tenants` | 1 | Single tenant: Grace |
-| **200** | `mdm/v1/parts` | 16,913 | Finished products + raw materials. **No tools here** — the `type` field has only `Finished Good`, `Raw Material`, `Sub Assembly` |
-| **200** | `mdm/v1/parts/{id}` | — | Per-record GET works. Same fields as the list view (no hidden detail). |
-| **200** | `mdm/v1/suppliers` | — | 708 KB |
-| **200** | `mdm/v1/customers` | — | 96 KB |
-| **200** | `mdm/v1/contacts` | — | 202 KB |
-| **200** | `mdm/v1/buildings` | — | 1.2 KB |
-| **200** | `mdm/v1/employees` | — | 272 KB |
-| **200** | `mdm/v1/operations` | 122 | Minimal: `code, id, inventoryType, type`. No FK to tools/parts/routings. |
-| **200** | `mdm/v1/operations/{id}` | — | Per-record GET works. Same fields as list. |
-| **200** | `purchasing/v1/purchase-orders` | — | 44 MB unfiltered, full PO history |
-| **200** | `production/v1/production-definitions/workcenters` | 143 | All workcenters including the 21 MILLs (codes 879, 880 = Brother Speedio FTP IPs) |
-| **200** | `production/v1/production-definitions/workcenters/{id}` | — | Fields: `buildingCode, buildingId, ipAddress, name, plcName, productionLineId, tankSilo, workcenterCode, workcenterGroup, workcenterId, workcenterType` |
-| **200** | `inventory/v1/inventory-definitions/supply-items` | 2,516 | **TOOLS LIVE HERE.** Filter to `category="Tools & Inserts"` for the 1,109 cutting tools and inserts. Schema: `category, description, group, id, inventoryUnit, supplyItemNumber, type` |
-| **200** | `inventory/v1/inventory-definitions/locations` | — | 279 KB |
+Record counts are as of **2026-04-09** unless noted. Schemas captured
+2026-04-09 by the Get-by-ID chain test.
+
+| Status | Path | Records | Schema / Notes |
+|---|---|---:|---|
+| **200** | `mdm/v1/tenants` | 1 | Single tenant: Grace. Auth canary — run first in any session. |
+| **200** | `mdm/v1/parts` | **16,921** | +8 since 2026-04-07. 19.6 MB unfiltered. Tools are **NOT** here. Fields: `buildingCode, createdById, createdDate, description, group, id, leadTimeDays, modifiedById, modifiedDate, name, note, number, productType, revision, source, status, type`. `type` ∈ {`Finished Good`, `Raw Material`, `Sub Assembly`}. |
+| **200** | `mdm/v1/parts?status=Active` | — | 7.8 MB — only verified working filter. All other query params silently ignored. |
+| **200** | `mdm/v1/parts/{id}` | — | Same 17 fields as list view — no hidden detail. |
+| **200** | `mdm/v1/suppliers` | **1,575** | 709 KB. Fields: `category, code, contactNote, createdById, createdDate, id, language, modifiedById, modifiedDate, name, note, oldCode, parentSupplierId, status, type, webAddress`. `parentSupplierId` is a self-referential FK. First record is a `Carrier` — list mixes material suppliers, carriers, etc. |
+| **200** | `mdm/v1/suppliers/{id}` | — | Same 16 fields as list view. |
+| **200** | `mdm/v1/customers` | **109** | 96 KB. 35 fields. FKs to employees (`assignedToId`, `assignedTo2Id`, `assignedTo3Id`), contacts (`contactResourceId`), suppliers (`defaultCarrierIds` array, `supplierCode`). |
+| **200** | `mdm/v1/customers/{id}` | — | Same 35 fields as list view. |
+| **200** | `mdm/v1/contacts` | **299** | 202 KB. |
+| **200** | `mdm/v1/buildings` | **4** | 1.2 KB. Referenced from workcenters via `buildingCode`/`buildingId`. |
+| **200** | `mdm/v1/employees` | **641** | 272 KB. UUIDs appear as `createdById`/`modifiedById` across essentially every other resource. |
+| **200** | `mdm/v1/operations` | **122** | Minimal 4-field schema: `code, id, inventoryType, type`. **No FK to tools, parts, or routings** — the reason issue #5 is blocked. |
+| **200** | `mdm/v1/operations/{id}` | — | Same 4 fields as list view. |
+| **200** | `inventory/v1/inventory-definitions/supply-items` | **2,516** | 614 KB. Full unfiltered. |
+| **200** | `inventory/v1/inventory-definitions/supply-items?category=Tools%20%26%20Inserts` | **1,109** | **TOOLS LIVE HERE.** Fields: `category, description, group, id, inventoryUnit, supplyItemNumber, type`. **No supplier FK. No cross-references of any kind.** See §3.5. |
+| **200** | `inventory/v1/inventory-definitions/supply-items/{id}` | — | Same 7 fields as list view. |
+| **200** | `inventory/v1/inventory-definitions/locations` | **1,270** | 279 KB. Not cross-referenced from supply-item. |
+| **200** | `production/v1/production-definitions/workcenters` | **143** | 21 MILLs. ⚠️ **Primary key is `workcenterId`, not `id`.** Fields: `buildingCode, buildingId, ipAddress, name, plcName, productionLineId, tankSilo, workcenterCode, workcenterGroup, workcenterId, workcenterType`. |
+| **200** | `production/v1/production-definitions/workcenters/{id}` | — | Same 11 fields as list view. |
+| **200** | `purchasing/v1/purchase-orders` | — | **44.2 MB** unfiltered. Full PO history. `?updatedAfter=` filter confirmed as a silent no-op on 2026-04-09 (byte-identical response). |
+| **200** | `scheduling/v1/jobs` | TBD | **NEW — discovered 2026-04-09.** Returns 200 but **15.8s response time**, so the body is large. Schema, record count, and whether it carries tool/operation/workcenter FKs all TBD. Worth a deep-dive as follow-up to issue #5 (routing/operation linkage) — if jobs link to tools, we get the missing operation→tool mapping for free. |
+
+### Probed — returned 404 (not subscribed or doesn't exist)
+
+All of the following were probed on 2026-04-09 and returned `404 RESOURCE_NOT_FOUND`. Kept here so future sessions know they've been checked and don't waste a cycle re-testing them blindly. Re-probe periodically to detect subscription changes.
+
+| Path | First checked | Notes |
+|---|---|---|
+| `tooling/v1/tools` | 2026-04-07 (re-check 2026-04-09) | In original pre-Datum docs. Blocks #4. |
+| `tooling/v1/tool-assemblies` | 2026-04-07 (re-check 2026-04-09) | Blocks #4. |
+| `tooling/v1/assemblies` | 2026-04-09 | Alternate spelling, also 404. |
+| `manufacturing/v1/routings` | 2026-04-07 (re-check 2026-04-09) | Blocks #5. |
+| `quality/v1/inspections` | 2026-04-09 | Speculative probe. |
+| `sales/v1/sales-orders` | 2026-04-09 | Speculative probe. |
+| `inventory/v1/on-hand` | 2026-04-09 | Would have given tool stock levels. |
+| `inventory/v1/containers` | 2026-04-09 | |
+| `inventory/v1/inventory-definitions/container-types` | 2026-04-09 | |
+| `mdm/v1/parts-buckets` | 2026-04-09 | |
+| `production/v1/production-definitions/assets` | 2026-04-09 | |
+| `production/v1/production-definitions/assemblies` | 2026-04-09 | |
+| `purchasing/v1/purchase-orders-lines` | 2026-04-09 | Would have given supply-item → PO → supplier linkage. |
+
+### §3.5 — Supply-item cross-references: the critical finding
+
+**The `inventory/v1/inventory-definitions/supply-items` resource is identity-only.** Its 7 fields are:
+
+- `category` (string, e.g. `"Tools & Inserts"`)
+- `description` (free-text, human-readable)
+- `group` (string, e.g. `"Machining"`)
+- `id` (UUID — Plex primary key)
+- `inventoryUnit` (string, e.g. `"Ea"`)
+- `supplyItemNumber` (string — see below)
+- `type` (string, e.g. `"SUPPLY"`)
+
+**There is no field on this resource that references another resource.** Specifically:
+
+- No `supplierId` or `preferredSupplierId` — **you cannot derive the vendor for a tool from Plex alone.**
+- No `locationId` or `warehouseId` — you cannot ask "where is this tool right now?" via this endpoint.
+- No `partId` — supply-items are not linked to `mdm/v1/parts`.
+- No `workcenterId` — supply-items are not assigned to machines.
+- No `operationId` — supply-items are not linked to operations.
+
+**Implication for Datum sync architecture:** vendor/supplier data for tools MUST live in Supabase as the source of truth. The Fusion JSON carries `vendor` and `product-id`, those get written to the `tools` table in Supabase, and when `build_supply_item_payload()` (issue #3) constructs the Plex POST body it uses only the 7 identity fields. Plex never learns who the vendor is, because Plex doesn't model that relationship for tools.
+
+This finding also kills the hypothesis that PO lines could be used as a back-channel for the vendor link — `purchasing/v1/purchase-orders-lines` returned 404 on 2026-04-09.
+
+**Sample `supplyItemNumber` values captured 2026-04-09** (confirming the
+"legacy free-text descriptions, not vendor part numbers" observation
+from the 2026-04-08 Decision Log):
+
+- `"Insert  HM90 AXCR 150508 IC28"`
+- `"Screw Indexable Face Mill F75"`
+- `"Tap #8-32 H3 Spiral Point"`
+
+Fusion will insert clean vendor part numbers like `"990910"`, so expect essentially zero collision with existing Plex records on first sync.
 
 ### Where tooling data actually lives
 
