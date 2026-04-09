@@ -28,3 +28,6 @@ outputs/
 
 # Claude Code worktree scratch space
 .claude/worktrees/
+
+# Claude Code per-machine permissions cache (regenerated on demand)
+.claude/settings.local.json
