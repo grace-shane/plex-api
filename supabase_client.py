@@ -239,3 +239,31 @@ class SupabaseClient:
             timeout=self.timeout,
         )
         return self._handle(response) or []
+
+    def update(
+        self,
+        table: str,
+        values: Mapping[str, Any],
+        *,
+        filters: Mapping[str, str],
+    ) -> list[dict]:
+        """
+        PATCH /rest/v1/{table}?<filters> — update matching rows.
+
+        ``filters`` is REQUIRED to prevent accidental full-table updates.
+        ``values`` is the dict of columns to set.
+        """
+        if not filters:
+            raise ValueError(
+                "update() requires at least one filter — refusing to "
+                "issue an unfiltered PATCH."
+            )
+        headers = {"Prefer": "return=representation"}
+        response = self._session.patch(
+            self._table_url(table),
+            data=json.dumps(dict(values)),
+            params=dict(filters),
+            headers=headers,
+            timeout=self.timeout,
+        )
+        return self._handle(response) or []

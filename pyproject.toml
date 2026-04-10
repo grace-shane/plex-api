@@ -19,6 +19,8 @@ dev = [
 
 [project.scripts]
 datum-sync = "sync:cli"
+datum-ingest-reference = "ingest_reference:main"
+datum-enrich = "enrich:main"
 
 [tool.setuptools]
 # Flat layout — all modules live at the repo root, no src/ directory.
@@ -34,6 +36,8 @@ py-modules = [
     "sync_supabase",
     "tool_library_loader",
     "validate_library",
+    "enrich",
+    "ingest_reference",
 ]
 # Don't try to auto-discover packages — there are none.
 packages = []
