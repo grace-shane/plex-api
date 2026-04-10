@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 import { supabase } from "@/lib/supabase";
 import type { Tool } from "@/lib/types";
@@ -35,7 +35,7 @@ type SortField =
   | "plex";
 type SortDir = "asc" | "desc";
 
-function compare(a: Tool, b: Tool, field: SortField, imperial: boolean): number {
+function compare(a: Tool, b: Tool, field: SortField): number {
   switch (field) {
     case "description":
       return (a.description || "").localeCompare(b.description || "");
@@ -62,6 +62,85 @@ function compare(a: Tool, b: Tool, field: SortField, imperial: boolean): number 
   }
 }
 
+/** Custom multi-select dropdown that looks like a normal <select> */
+function TypeDropdown({
+  types,
+  selected,
+  onToggle,
+  onClear,
+}: {
+  types: string[];
+  selected: Set<string>;
+  onToggle: (type: string) => void;
+  onClear: () => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    function handleClick(e: MouseEvent) {
+      if (ref.current && !ref.current.contains(e.target as Node)) {
+        setOpen(false);
+      }
+    }
+    document.addEventListener("mousedown", handleClick);
+    return () => document.removeEventListener("mousedown", handleClick);
+  }, []);
+
+  const label =
+    selected.size === 0
+      ? "All types"
+      : selected.size === 1
+        ? [...selected][0]
+        : `${selected.size} types`;
+
+  return (
+    <div ref={ref} className="relative">
+      <button
+        onClick={() => setOpen(!open)}
+        className="flex h-9 items-center gap-1 rounded-md border border-border bg-background px-3 text-sm text-foreground"
+      >
+        {label}
+        <svg
+          className={`ml-1 h-3 w-3 transition-transform ${open ? "rotate-180" : ""}`}
+          viewBox="0 0 12 12"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="2"
+        >
+          <path d="M3 4.5 L6 7.5 L9 4.5" />
+        </svg>
+      </button>
+      {open && (
+        <div className="absolute left-0 top-10 z-50 min-w-[180px] rounded-md border border-border bg-background py-1 shadow-md">
+          {selected.size > 0 && (
+            <button
+              onClick={() => { onClear(); setOpen(false); }}
+              className="w-full px-3 py-1.5 text-left text-xs text-muted-foreground hover:bg-accent"
+            >
+              Clear all
+            </button>
+          )}
+          {types.map((type) => (
+            <label
+              key={type}
+              className="flex cursor-pointer items-center gap-2 px-3 py-1.5 text-sm hover:bg-accent"
+            >
+              <input
+                type="checkbox"
+                checked={selected.has(type)}
+                onChange={() => onToggle(type)}
+                className="rounded"
+              />
+              {type}
+            </label>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 export function ToolsPage() {
   const [tools, setTools] = useState<Tool[]>([]);
   const [search, setSearch] = useState("");
@@ -71,12 +150,13 @@ export function ToolsPage() {
   const [searchParams] = useSearchParams();
   const [sortField, setSortField] = useState<SortField>("description");
   const [sortDir, setSortDir] = useState<SortDir>("asc");
+  const [recentCount, setRecentCount] = useState<number | null>(null);
 
   useEffect(() => {
     async function fetchTools() {
       const { data, error } = await supabase
         .from("tools")
-        .select("*, libraries(library_name, vendor)")
+        .select("*, libraries(library_name, vendor, source_modified_at)")
         .order("vendor")
         .order("product_id");
 
@@ -84,6 +164,13 @@ export function ToolsPage() {
         console.error("Failed to fetch tools:", error);
       } else {
         setTools(data ?? []);
+
+        // Count tools whose library was modified in the last 24h (per Fusion Hub)
+        const oneDayAgo = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
+        const recent = (data ?? []).filter(
+          (t) => t.libraries?.source_modified_at && t.libraries.source_modified_at > oneDayAgo
+        );
+        setRecentCount(recent.length);
       }
       setLoading(false);
     }
@@ -98,9 +185,7 @@ export function ToolsPage() {
     } catch {}
   }
 
-  // Support ?library= param from Libraries page links
   const libraryParam = searchParams.get("library");
-
   const toolTypes = [...new Set(tools.map((t) => t.type))].sort();
 
   const filtered = tools.filter((t) => {
@@ -116,13 +201,9 @@ export function ToolsPage() {
   });
 
   const sorted = [...filtered].sort((a, b) => {
-    const c = compare(a, b, sortField, imperial);
+    const c = compare(a, b, sortField);
     return sortDir === "asc" ? c : -c;
   });
-
-  // Recent modifications (last 24h)
-  const oneDayAgo = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
-  const recentMods = tools.filter((t) => t.updated_at > oneDayAgo);
 
   function handleSort(field: SortField) {
     if (sortField === field) {
@@ -136,11 +217,8 @@ export function ToolsPage() {
   function toggleTypeFilter(type: string) {
     setTypeFilters((prev) => {
       const next = new Set(prev);
-      if (next.has(type)) {
-        next.delete(type);
-      } else {
-        next.add(type);
-      }
+      if (next.has(type)) next.delete(type);
+      else next.add(type);
       return next;
     });
   }
@@ -172,13 +250,15 @@ export function ToolsPage() {
 
   return (
     <div className="space-y-4">
-      {recentMods.length > 0 && (
-        <div className="rounded-md border border-red-300 bg-red-50 px-4 py-2 text-sm text-red-800 dark:border-red-800 dark:bg-red-950 dark:text-red-200">
-          <span className="font-medium">{recentMods.length} tool{recentMods.length !== 1 ? "s" : ""} modified in the last 24 hours</span>
-          {" \u2014 "}
-          {recentMods.slice(0, 5).map((t) => t.description || t.product_id).join(", ")}
-          {recentMods.length > 5 && `, and ${recentMods.length - 5} more`}
-        </div>
+      {recentCount != null && recentCount > 0 && (
+        <Link to="/recent">
+          <div className="cursor-pointer rounded-md border border-red-300 bg-red-50 px-4 py-2 text-sm text-red-800 transition-colors hover:bg-red-100 dark:border-red-800 dark:bg-red-950 dark:text-red-200 dark:hover:bg-red-900">
+            <span className="font-medium">
+              {recentCount} tool{recentCount !== 1 ? "s" : ""} modified in Fusion Hub in the last 24 hours
+            </span>
+            <span className="ml-2 text-red-600 dark:text-red-400">&rarr;</span>
+          </div>
+        </Link>
       )}
 
       <div className="flex items-center justify-between">
@@ -215,23 +295,12 @@ export function ToolsPage() {
           onChange={(e) => setSearch(e.target.value)}
           className="max-w-sm"
         />
-        <select
-          multiple
-          value={[...typeFilters]}
-          onChange={(e) => {
-            const selected = new Set(
-              [...e.target.selectedOptions].map((o) => o.value)
-            );
-            setTypeFilters(selected);
-          }}
-          className="h-9 rounded-md border border-border bg-background px-3 text-sm text-foreground"
-        >
-          {toolTypes.map((type) => (
-            <option key={type} value={type}>
-              {type}
-            </option>
-          ))}
-        </select>
+        <TypeDropdown
+          types={toolTypes}
+          selected={typeFilters}
+          onToggle={toggleTypeFilter}
+          onClear={() => setTypeFilters(new Set())}
+        />
         {typeFilters.size > 0 && (
           <div className="flex flex-wrap items-center gap-1.5">
             {[...typeFilters].map((t) => (
@@ -244,12 +313,6 @@ export function ToolsPage() {
                 {t} &times;
               </Badge>
             ))}
-            <button
-              onClick={() => setTypeFilters(new Set())}
-              className="text-xs text-muted-foreground hover:underline"
-            >
-              clear all
-            </button>
           </div>
         )}
         {libraryParam && (

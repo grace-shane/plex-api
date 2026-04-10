@@ -3,6 +3,7 @@ import { Layout } from "@/components/Layout";
 import { ToolsPage } from "@/pages/ToolsPage";
 import { ToolDetailPage } from "@/pages/ToolDetailPage";
 import { LibrariesPage } from "@/pages/LibrariesPage";
+import { RecentPage } from "@/pages/RecentPage";
 
 export default function App() {
   return (
@@ -12,6 +13,7 @@ export default function App() {
           <Route index element={<ToolsPage />} />
           <Route path="tools/:id" element={<ToolDetailPage />} />
           <Route path="libraries" element={<LibrariesPage />} />
+          <Route path="recent" element={<RecentPage />} />
         </Route>
       </Routes>
     </BrowserRouter>
