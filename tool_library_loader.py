@@ -91,6 +91,10 @@ def load_library(path: Path, validate: bool = False) -> list[dict] | None:
     if not _check_file_age(path):
         return None  # stale — caller decides whether to abort or skip
 
+    if path.stat().st_size == 0:
+        log.warning("EMPTY FILE — %s is 0 bytes. Skipping.", path.name)
+        return None
+
     try:
         with open(path, "r", encoding="utf-8") as f:
             raw = json.load(f)
@@ -103,7 +107,7 @@ def load_library(path: Path, validate: bool = False) -> list[dict] | None:
         )
         return None
 
-    except json.JSONDecodeError as e:
+    except (json.JSONDecodeError, OSError) as e:
         log.error(
             "MALFORMED JSON — %s failed to parse: %s. "
             "File may be mid-write by ADC.",
