@@ -171,7 +171,7 @@ of every resource + cross-reference discussion, see
 | `inventory/v1/inventory-definitions/supply-items` | 2,516 | **WHERE TOOLS LIVE.** Filter `category="Tools & Inserts"` for the 1,109 cutting tools. **⚠️ No supplier FK, no cross-references of any kind — identity-only. See §3.5 of Plex_API_Reference.md.** |
 | `inventory/v1/inventory-definitions/supply-items/{id}` | — | Per-id verified 2026-04-09. Same 7 fields, no hidden detail. |
 | `inventory/v1/inventory-definitions/locations` | 1,270 | Inventory location master. Not referenced from supply-item. |
-| `scheduling/v1/jobs` | TBD | **NEW — discovered 2026-04-09.** Returns 200 but ~15.8s response time (large body). Schema TBD. Potentially relevant to #5 if jobs carry tool references. |
+| `scheduling/v1/jobs` | 114,684 | **Deep-dived 2026-04-10.** 18 fields: `jobNumber, partId, partNumber, buildingId, quantity, dates, status`. **No tool/operation/workcenter FKs.** Does NOT unblock #5. |
 
 ### Where tooling data actually lives
 
@@ -241,6 +241,38 @@ we've seen actually work on `mdm/v1/parts` is `?status=Active` (reduces
 19.6 MB → 7.8 MB). The `typeName`, `type`, `category`, `limit` parameters
 all return the full unfiltered response. Always assume `limit` does
 nothing and use real filters or accept the full DB pull.
+
+---
+
+## Plex Classic Web Services (discovered 2026-04-10)
+
+The REST API at `connect.plex.com` exposes a curated subset of Plex
+data. The older **Classic Web Services** at `plexonline.com` can access
+virtually the entire Classic schema via Data Sources (parameterized
+stored procedures).
+
+- **Endpoint:** `POST https://plexonline.com/Modules/Xmla/XmlDataSource.asmx`
+- **WSDL:** append `?WSDL` to the endpoint URL
+- **Auth:** Web Service User account (username/password + Company Code).
+  **NOT the Developer Portal Consumer Key** — completely separate credentials.
+- **Format:** SOAP/XML (or JSON wrapper at `/api/datasources/{key}/execute`)
+- **Licensing:** Included with base Plex subscription (no extra cost)
+- **ID format:** Integer keys (not UUIDs — mapping needed if mixing with REST API)
+
+**What it can access that REST cannot:**
+
+| Capability | Classic Data Source | REST API status |
+|---|---|---|
+| Part Operations | `Part_Operation` tables | 4 fields, no FKs |
+| Tool-to-operation assignments | Tool Assignment data sources | Does not exist |
+| DCS / Attachments | `DCS_v2`, `Attachment_Group_Key` | 404 on all paths |
+| Workcenter documents | Workcenter doc data sources | 11 identity fields only |
+| Routing / op sequences | Routing data sources | 404 (`manufacturing/v1/routings`) |
+| Supply item cross-refs | Full supply item schema | 7 identity fields only |
+
+**Status:** Access request pending. See
+[`docs/Plex_Classic_API_Request.md`](./Plex_Classic_API_Request.md)
+for the request document.
 
 ---
 
@@ -365,14 +397,31 @@ https://github.com/grace-shane/datum/issues for live status.
    Calls validate_library gate before every run.
 9. Error handling + logging to network share text file — issue #8.
 
-### Architectural decisions still pending (issues #4 and #5)
+### Architectural decisions — #4 and #5 (updated 2026-04-10)
 
-- **#4 — Tool Assemblies**: Plex's supply-item schema is identity-only
-  (no holder linkage). Four options listed in the issue body —
-  descope / encode in description / CSV upload / ask Plex for a
-  different product. Needs the user's call before any code work.
-- **#5 — Routing/Operation linkage**: `mdm/v1/operations` exists but
-  has no FK to tools. Same kind of decision needed as #4.
+**REST API verdict: blocked.** The `scheduling/v1/jobs` deep-dive
+(114,684 records, 18 fields) confirmed zero tool/operation/workcenter
+FKs. All 7 document/attachment probe paths returned 404. The Connect
+REST API does not expose tool-to-operation relationships, DCS
+attachments, or workcenter documents.
+
+**Classic Web Services: viable path.** The older SOAP API at
+`plexonline.com/Modules/Xmla/XmlDataSource.asmx` wraps Data Sources
+(parameterized stored procs) that CAN access Part Operations, tool
+assignments, DCS attachments, and routing data. Requires separate
+credentials (Web Service User account + Company Code, NOT the Developer
+Portal Consumer Key). Access request doc:
+[`docs/Plex_Classic_API_Request.md`](./Plex_Classic_API_Request.md).
+
+- **#4 — Tool Assemblies**: Blocked on REST API. Classic Web Services
+  may expose assembly relationships via Part Operation Data Sources.
+  Pending Classic API access.
+- **#5 — Routing/Operation linkage**: Blocked on REST API. Classic Web
+  Services can access Part Operations and tool assignments. Pending
+  Classic API access.
+- **#6 — Workcenter doc push**: REST workcenter has 11 identity fields
+  only, no document/attachment sub-resources. Classic DCS_v2 is the
+  path. Pending Classic API access.
 
 ---
 
