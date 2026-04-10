@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Link } from "react-router-dom";
+import { Link, useSearchParams } from "react-router-dom";
 import { supabase } from "@/lib/supabase";
 import type { Tool } from "@/lib/types";
 import { Input } from "@/components/ui/input";
@@ -13,11 +13,15 @@ import {
   TableRow,
 } from "@/components/ui/table";
 
+const MM_PER_INCH = 25.4;
+
 export function ToolsPage() {
   const [tools, setTools] = useState<Tool[]>([]);
   const [search, setSearch] = useState("");
   const [typeFilter, setTypeFilter] = useState<string | null>(null);
+  const [imperial, setImperial] = useState(false);
   const [loading, setLoading] = useState(true);
+  const [searchParams] = useSearchParams();
 
   useEffect(() => {
     async function fetchTools() {
@@ -37,10 +41,14 @@ export function ToolsPage() {
     fetchTools();
   }, []);
 
+  // Support ?library= param from Libraries page links
+  const libraryParam = searchParams.get("library");
+
   const toolTypes = [...new Set(tools.map((t) => t.type))].sort();
 
   const filtered = tools.filter((t) => {
     if (typeFilter && t.type !== typeFilter) return false;
+    if (libraryParam && t.libraries?.library_name !== libraryParam) return false;
     if (!search) return true;
     const q = search.toLowerCase();
     return (
@@ -49,6 +57,14 @@ export function ToolsPage() {
       t.vendor.toLowerCase().includes(q)
     );
   });
+
+  function fmt(val: number | null): string {
+    if (val == null) return "—";
+    const v = imperial ? val / MM_PER_INCH : val;
+    return imperial ? v.toFixed(4) : v.toFixed(2);
+  }
+
+  const dimUnit = imperial ? "in" : "mm";
 
   if (loading) {
     return <div className="py-12 text-center text-muted-foreground">Loading tools...</div>;
@@ -63,6 +79,24 @@ export function ToolsPage() {
             ({filtered.length})
           </span>
         </h1>
+        <label className="flex cursor-pointer items-center gap-2 text-sm">
+          <span className={imperial ? "text-muted-foreground" : "font-medium"}>mm</span>
+          <button
+            role="switch"
+            aria-checked={imperial}
+            onClick={() => setImperial(!imperial)}
+            className={`relative inline-flex h-5 w-9 shrink-0 items-center rounded-full border transition-colors ${
+              imperial ? "bg-primary" : "bg-muted"
+            }`}
+          >
+            <span
+              className={`pointer-events-none block h-3.5 w-3.5 rounded-full bg-background shadow-sm transition-transform ${
+                imperial ? "translate-x-4" : "translate-x-0.5"
+              }`}
+            />
+          </button>
+          <span className={imperial ? "font-medium" : "text-muted-foreground"}>in</span>
+        </label>
       </div>
 
       <div className="flex flex-wrap items-center gap-3">
@@ -72,31 +106,26 @@ export function ToolsPage() {
           onChange={(e) => setSearch(e.target.value)}
           className="max-w-sm"
         />
-        <div className="flex flex-wrap gap-1">
-          <button
-            onClick={() => setTypeFilter(null)}
-            className={`rounded-full border px-2.5 py-0.5 text-xs transition-colors ${
-              typeFilter === null
-                ? "border-primary bg-primary text-primary-foreground"
-                : "border-border text-muted-foreground hover:bg-accent"
-            }`}
-          >
-            All
-          </button>
+        <select
+          value={typeFilter ?? ""}
+          onChange={(e) => setTypeFilter(e.target.value || null)}
+          className="h-9 rounded-md border border-border bg-background px-3 text-sm text-foreground"
+        >
+          <option value="">All types</option>
           {toolTypes.map((type) => (
-            <button
-              key={type}
-              onClick={() => setTypeFilter(type === typeFilter ? null : type)}
-              className={`rounded-full border px-2.5 py-0.5 text-xs transition-colors ${
-                typeFilter === type
-                  ? "border-primary bg-primary text-primary-foreground"
-                  : "border-border text-muted-foreground hover:bg-accent"
-              }`}
-            >
+            <option key={type} value={type}>
               {type}
-            </button>
+            </option>
           ))}
-        </div>
+        </select>
+        {libraryParam && (
+          <div className="flex items-center gap-1.5">
+            <Badge variant="secondary">{libraryParam}</Badge>
+            <Link to="/" className="text-xs text-muted-foreground hover:underline">
+              clear
+            </Link>
+          </div>
+        )}
       </div>
 
       <div className="overflow-x-auto rounded-md border">
@@ -107,8 +136,8 @@ export function ToolsPage() {
               <TableHead className="whitespace-nowrap">Part #</TableHead>
               <TableHead>Vendor</TableHead>
               <TableHead>Type</TableHead>
-              <TableHead className="text-right whitespace-nowrap">Dia (mm)</TableHead>
-              <TableHead className="text-right whitespace-nowrap">OAL (mm)</TableHead>
+              <TableHead className="text-right whitespace-nowrap">Dia ({dimUnit})</TableHead>
+              <TableHead className="text-right whitespace-nowrap">OAL ({dimUnit})</TableHead>
               <TableHead className="text-right">Flutes</TableHead>
               <TableHead>Plex</TableHead>
             </TableRow>
@@ -140,10 +169,10 @@ export function ToolsPage() {
                     <Badge variant="secondary">{tool.type}</Badge>
                   </TableCell>
                   <TableCell className="text-right font-mono text-sm">
-                    {tool.geo_dc?.toFixed(2) ?? "—"}
+                    {fmt(tool.geo_dc)}
                   </TableCell>
                   <TableCell className="text-right font-mono text-sm">
-                    {tool.geo_oal?.toFixed(2) ?? "—"}
+                    {fmt(tool.geo_oal)}
                   </TableCell>
                   <TableCell className="text-right font-mono text-sm">
                     {tool.geo_nof ?? "—"}

@@ -53,6 +53,12 @@ INCHES_TO_MM = 25.4
 
 EXCLUDED_TYPES = frozenset({"holder", "probe"})
 
+# Fusion 360 uses legacy type names that don't match modern shop terminology.
+# Map lowercased Fusion type → corrected display name.
+TYPE_RENAMES: dict[str, str] = {
+    "slot mill": "slitting saw",
+}
+
 # Geometry fields that are dimensional (convert inches → mm) vs dimensionless
 # (counts, flags, angles — carry as-is).
 GEOMETRY_LENGTH_FIELDS = {
@@ -239,7 +245,10 @@ def build_tool_row(tool: dict) -> dict:
         "vendor": _maybe_str(tool.get("vendor")) or "",
         "product_id": normalize_product_id(tool.get("product-id")) or "",
         "description": _maybe_str(tool.get("description")) or "",
-        "type": _maybe_str(tool.get("type")) or "",
+        "type": TYPE_RENAMES.get(
+            (_maybe_str(tool.get("type")) or "").lower(),
+            _maybe_str(tool.get("type")) or "",
+        ),
         "bmc": _maybe_str(tool.get("BMC")),
         "grade": _maybe_str(tool.get("GRADE")),
         # reference_guid is observed as integer 0 in Harvey/Helical — store as string

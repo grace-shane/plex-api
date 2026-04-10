@@ -46,7 +46,8 @@ KNOWN_TOOL_TYPES = {
     "drill",
     "face mill",
     "form mill",
-    "slot mill",
+    "slot mill",       # Fusion name; ingested as "slitting saw"
+    "slitting saw",
     "holder",
     "probe",
 }

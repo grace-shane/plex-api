@@ -14,14 +14,57 @@ import {
   TableRow,
 } from "@/components/ui/table";
 
-function GeoRow({ label, value, unit }: { label: string; value: number | null; unit?: string }) {
+const MM_PER_INCH = 25.4;
+
+function UnitToggle({ imperial, setImperial }: { imperial: boolean; setImperial: (v: boolean) => void }) {
+  return (
+    <label className="flex cursor-pointer items-center gap-2 text-sm">
+      <span className={imperial ? "text-muted-foreground" : "font-medium"}>mm</span>
+      <button
+        role="switch"
+        aria-checked={imperial}
+        onClick={() => setImperial(!imperial)}
+        className={`relative inline-flex h-5 w-9 shrink-0 items-center rounded-full border transition-colors ${
+          imperial ? "bg-primary" : "bg-muted"
+        }`}
+      >
+        <span
+          className={`pointer-events-none block h-3.5 w-3.5 rounded-full bg-background shadow-sm transition-transform ${
+            imperial ? "translate-x-4" : "translate-x-0.5"
+          }`}
+        />
+      </button>
+      <span className={imperial ? "font-medium" : "text-muted-foreground"}>in</span>
+    </label>
+  );
+}
+
+function GeoRow({
+  label,
+  value,
+  unit,
+  imperial,
+}: {
+  label: string;
+  value: number | null;
+  unit?: string;
+  imperial?: boolean;
+}) {
   if (value == null) return null;
+
+  let displayVal = value;
+  let displayUnit = unit;
+  if (unit === "mm" && imperial) {
+    displayVal = value / MM_PER_INCH;
+    displayUnit = "in";
+  }
+
   return (
     <div className="flex justify-between py-1">
       <span className="text-muted-foreground">{label}</span>
       <span className="font-mono text-sm">
-        {typeof value === "number" ? value.toFixed(3) : value}
-        {unit && <span className="ml-1 text-muted-foreground">{unit}</span>}
+        {typeof displayVal === "number" ? displayVal.toFixed(imperial && unit === "mm" ? 4 : 3) : displayVal}
+        {displayUnit && <span className="ml-1 text-muted-foreground">{displayUnit}</span>}
       </span>
     </div>
   );
@@ -32,6 +75,7 @@ export function ToolDetailPage() {
   const [tool, setTool] = useState<Tool | null>(null);
   const [presets, setPresets] = useState<CuttingPreset[]>([]);
   const [loading, setLoading] = useState(true);
+  const [imperial, setImperial] = useState(false);
 
   useEffect(() => {
     async function fetch() {
@@ -85,7 +129,8 @@ export function ToolDetailPage() {
             {tool.vendor} &middot; {tool.product_id}
           </p>
         </div>
-        <div className="flex gap-2">
+        <div className="flex items-center gap-3">
+          <UnitToggle imperial={imperial} setImperial={setImperial} />
           <Badge variant="secondary">{tool.type}</Badge>
           {tool.plex_supply_item_id ? (
             <Badge variant="default">Synced to Plex</Badge>
@@ -101,14 +146,14 @@ export function ToolDetailPage() {
             <CardTitle className="text-base">Geometry</CardTitle>
           </CardHeader>
           <CardContent className="space-y-0.5">
-            <GeoRow label="Cutting diameter (DC)" value={tool.geo_dc} unit="mm" />
-            <GeoRow label="Overall length (OAL)" value={tool.geo_oal} unit="mm" />
-            <GeoRow label="Flute length (LCF)" value={tool.geo_lcf} unit="mm" />
-            <GeoRow label="Body length (LB)" value={tool.geo_lb} unit="mm" />
-            <GeoRow label="Shank diameter (SFDM)" value={tool.geo_sfdm} unit="mm" />
+            <GeoRow label="Cutting diameter (DC)" value={tool.geo_dc} unit="mm" imperial={imperial} />
+            <GeoRow label="Overall length (OAL)" value={tool.geo_oal} unit="mm" imperial={imperial} />
+            <GeoRow label="Flute length (LCF)" value={tool.geo_lcf} unit="mm" imperial={imperial} />
+            <GeoRow label="Body length (LB)" value={tool.geo_lb} unit="mm" imperial={imperial} />
+            <GeoRow label="Shank diameter (SFDM)" value={tool.geo_sfdm} unit="mm" imperial={imperial} />
             <GeoRow label="Number of flutes (NOF)" value={tool.geo_nof} />
             <GeoRow label="Helix angle (SIG)" value={tool.geo_sig} unit="deg" />
-            <GeoRow label="Corner radius (RE)" value={tool.geo_re} unit="mm" />
+            <GeoRow label="Corner radius (RE)" value={tool.geo_re} unit="mm" imperial={imperial} />
             {tool.geo_dc == null && tool.geo_oal == null && (
               <p className="py-2 text-sm text-muted-foreground">No geometry data available.</p>
             )}
@@ -214,9 +259,9 @@ export function ToolDetailPage() {
                   <TableHead>Name</TableHead>
                   <TableHead>Material</TableHead>
                   <TableHead className="text-right">Vc (m/min)</TableHead>
-                  <TableHead className="text-right">fz (mm)</TableHead>
+                  <TableHead className="text-right">fz ({imperial ? "in" : "mm"})</TableHead>
                   <TableHead className="text-right">RPM</TableHead>
-                  <TableHead className="text-right">Vf (mm/min)</TableHead>
+                  <TableHead className="text-right">Vf ({imperial ? "in/min" : "mm/min"})</TableHead>
                   <TableHead>Coolant</TableHead>
                 </TableRow>
               </TableHeader>
@@ -229,13 +274,21 @@ export function ToolDetailPage() {
                       {p.v_c?.toFixed(1) ?? "—"}
                     </TableCell>
                     <TableCell className="text-right font-mono text-sm">
-                      {p.f_z?.toFixed(4) ?? "—"}
+                      {p.f_z == null
+                        ? "—"
+                        : imperial
+                          ? (p.f_z / MM_PER_INCH).toFixed(5)
+                          : p.f_z.toFixed(4)}
                     </TableCell>
                     <TableCell className="text-right font-mono text-sm">
                       {p.n?.toFixed(0) ?? "—"}
                     </TableCell>
                     <TableCell className="text-right font-mono text-sm">
-                      {p.v_f?.toFixed(1) ?? "—"}
+                      {p.v_f == null
+                        ? "—"
+                        : imperial
+                          ? (p.v_f / MM_PER_INCH).toFixed(2)
+                          : p.v_f.toFixed(1)}
                     </TableCell>
                     <TableCell>
                       {p.tool_coolant ? (

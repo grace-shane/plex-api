@@ -9,9 +9,9 @@
     },
     {
       "name": "web",
-      "runtimeExecutable": "npm",
-      "runtimeArgs": ["run", "dev", "--prefix", "web"],
-      "port": 5173
+      "runtimeExecutable": "npx",
+      "runtimeArgs": ["--prefix", "web", "vite", "web", "--port", "5174"],
+      "port": 5174
     }
   ]
 }
