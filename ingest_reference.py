@@ -194,6 +194,7 @@ VENDOR_CATALOG_PATTERNS = [
     "Helical Solutions",
     "Garr Tool",
     "Guhring",
+    "Haas Tooling",
     "Sandvik",
     "Delta Tools",
     "XEBEC",
