@@ -8,12 +8,15 @@ Verifies the contract:
   - blank lines and # comments are skipped
   - matched surrounding quotes (single or double) are stripped
   - returns the count of injected variables
+  - walk-up finds .env.local in parent/grandparent directories
+  - explicit path= arg wins over walk-up
 """
 import os
+from unittest.mock import patch
 
 import pytest
 
-from bootstrap import load_env_local
+from bootstrap import load_env_local, _find_env_local
 
 
 # ─────────────────────────────────────────────
@@ -167,3 +170,84 @@ class TestWhitespace:
         assert injected == 2
         assert os.environ["FOO"] == "bar"
         assert os.environ["BAZ"] == "qux"
+
+
+# -------------------------------------------------
+# Walk-up directory search for .env.local
+# -------------------------------------------------
+class TestWalkUp:
+    def test_finds_env_local_in_parent(self, tmp_path):
+        """Simulates a worktree at tmp/child/ with .env.local at tmp/."""
+        (tmp_path / ".env.local").write_text("X=1\n")
+        child = tmp_path / "child"
+        child.mkdir()
+
+        with patch("bootstrap._PROJECT_ROOT", child):
+            found = _find_env_local()
+        assert found == tmp_path / ".env.local"
+
+    def test_finds_env_local_in_grandparent(self, tmp_path):
+        """Simulates .claude/worktrees/foo with .env.local two levels up."""
+        (tmp_path / ".env.local").write_text("X=1\n")
+        deep = tmp_path / "a" / "b"
+        deep.mkdir(parents=True)
+
+        with patch("bootstrap._PROJECT_ROOT", deep):
+            found = _find_env_local()
+        assert found == tmp_path / ".env.local"
+
+    def test_returns_none_when_nothing_in_chain(self, tmp_path):
+        """No .env.local anywhere — should return None, not raise."""
+        empty = tmp_path / "nowhere"
+        empty.mkdir()
+
+        with patch("bootstrap._PROJECT_ROOT", empty):
+            found = _find_env_local()
+        assert found is None
+
+    def test_prefers_closest_ancestor(self, tmp_path):
+        """If both parent/ and grandparent/ have .env.local, pick closest."""
+        (tmp_path / ".env.local").write_text("LEVEL=root\n")
+        mid = tmp_path / "mid"
+        mid.mkdir()
+        (mid / ".env.local").write_text("LEVEL=mid\n")
+        child = mid / "child"
+        child.mkdir()
+
+        with patch("bootstrap._PROJECT_ROOT", child):
+            found = _find_env_local()
+        assert found == mid / ".env.local"
+
+    def test_explicit_path_wins_over_walkup(self, tmp_path, monkeypatch):
+        """An explicit path= argument bypasses the walk-up entirely."""
+        # Put a .env.local in the walk-up chain
+        (tmp_path / ".env.local").write_text("FROM_WALKUP=yes\n")
+        child = tmp_path / "child"
+        child.mkdir()
+
+        # But pass an explicit file with different content
+        explicit = tmp_path / "custom.env"
+        explicit.write_text("FROM_EXPLICIT=yes\n")
+
+        monkeypatch.delenv("FROM_WALKUP", raising=False)
+        monkeypatch.delenv("FROM_EXPLICIT", raising=False)
+
+        with patch("bootstrap._PROJECT_ROOT", child):
+            injected = load_env_local(path=explicit)
+
+        assert injected == 1
+        assert os.environ.get("FROM_EXPLICIT") == "yes"
+        assert "FROM_WALKUP" not in os.environ
+
+    def test_walkup_default_loads_vars(self, tmp_path, monkeypatch):
+        """load_env_local() with no args uses walk-up and loads vars."""
+        (tmp_path / ".env.local").write_text("WALKUP_TEST=hello\n")
+        child = tmp_path / "child"
+        child.mkdir()
+        monkeypatch.delenv("WALKUP_TEST", raising=False)
+
+        with patch("bootstrap._PROJECT_ROOT", child):
+            injected = load_env_local()
+
+        assert injected == 1
+        assert os.environ["WALKUP_TEST"] == "hello"
