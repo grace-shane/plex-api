@@ -66,23 +66,40 @@ Classic schema via Data Sources. This would let Datum:
 4. **Push tool lists to workcenter documents** — so machine operators
    on the Brother Speedios (879, 880) have current tool data
 
-### What we found so far
+### What we found so far (April 10, 2026)
 
-We confirmed the Classic Web Services endpoint is live — `GET
-https://www.plexonline.com/Modules/Xmla/XmlDataSource.asmx?WSDL`
-returns the Plex login page (not a 404). The login page shows only an
-**"IAM Login"** button redirecting to `/signon` — Plex Classic now
-authenticates through **Rockwell IAM** (FactoryTalk Hub / SSO), not the
-legacy Company Code + username/password form.
+We tested the Classic Web Services endpoint from two angles:
+
+1. **Unauthenticated GET** to
+   `https://www.plexonline.com/Modules/Xmla/XmlDataSource.asmx?WSDL`
+   — returned the Plex login page (IAM Login button only, no
+   username/password form). This confirms the endpoint path exists and
+   Plex Classic now authenticates through Rockwell IAM.
+
+2. **Authenticated GET** (logged into Plex via IAM in the same browser
+   session, then navigated to the WSDL URL) — returned a **system error
+   page**: *"A system error has occurred on this page. Plex personnel
+   have been automatically notified and are working on the problem."*
+
+The error occurs after authentication succeeds (the Plex header bar
+renders, meaning the session is valid). The ASMX endpoint itself is
+throwing a server-side exception. Possible causes:
+
+- Classic Web Services may not be enabled for Grace Engineering's
+  subscription
+- The ASMX endpoint may have been deprecated or broken during the
+  IAM migration
+- The endpoint URL may have changed to a different path
 
 ### What we need
 
 | Item | Details |
 |---|---|
-| **IAM service account or API credentials** | A service account in Rockwell IAM with permission to call Classic Web Services. The old username/password auth has been replaced by IAM SSO — we need the equivalent for programmatic (non-browser) access. This is separate from the Developer Portal Consumer Key we already have for the REST API. |
-| **Company Code** | Grace Engineering's numeric Company Code in Classic Plex (not the tenant UUID `58f781ba-...` used by the REST API). This may still be required as a parameter in SOAP calls even if auth goes through IAM. |
-| **Data Source inventory** | A list of available Data Sources related to: Part Operations, Tool Assignments, Workcenter Assignments, and DCS/Attachments. If custom Data Sources need to be created, we can specify the exact fields we need. |
-| **Guidance on programmatic auth** | How does a script (not a browser) authenticate to the Classic Web Services endpoint now that IAM SSO is required? Is there an OAuth2 client credentials flow, an API key, or a service account token? |
+| **Is Classic Web Services available to us?** | The ASMX endpoint at `plexonline.com/Modules/Xmla/XmlDataSource.asmx` returns a system error when accessed by an authenticated Grace Engineering user. Is this feature enabled for our subscription? If not, what does it take to enable it? |
+| **Correct endpoint URL** | If the ASMX path has moved during the IAM migration, what is the current URL for programmatic Data Source access? |
+| **Programmatic auth method** | How does a script (not a browser) authenticate to Classic Web Services now that IAM SSO is required? Is there an OAuth2 client credentials flow, an API key, or a service account token? This is separate from the Developer Portal Consumer Key we already use for the REST API at `connect.plex.com`. |
+| **Company Code** | Grace Engineering's numeric Company Code in Classic Plex (not the tenant UUID `58f781ba-...` used by the REST API). This may be required as a parameter in SOAP calls. |
+| **Data Source inventory** | If Web Services is available (or can be enabled), we need a list of Data Sources related to: Part Operations, Tool Assignments, Workcenter Assignments, and DCS/Attachments. If custom Data Sources need to be created, we can specify the exact fields we need. |
 
 ### What we will NOT do
 
