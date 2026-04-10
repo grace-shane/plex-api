@@ -66,14 +66,23 @@ Classic schema via Data Sources. This would let Datum:
 4. **Push tool lists to workcenter documents** — so machine operators
    on the Brother Speedios (879, 880) have current tool data
 
+### What we found so far
+
+We confirmed the Classic Web Services endpoint is live — `GET
+https://www.plexonline.com/Modules/Xmla/XmlDataSource.asmx?WSDL`
+returns the Plex login page (not a 404). The login page shows only an
+**"IAM Login"** button redirecting to `/signon` — Plex Classic now
+authenticates through **Rockwell IAM** (FactoryTalk Hub / SSO), not the
+legacy Company Code + username/password form.
+
 ### What we need
 
 | Item | Details |
 |---|---|
-| **Web Service User account** | A dedicated Plex user (or service account) with Web Service access enabled. This is separate from the Developer Portal Consumer Key we already have. |
-| **Company Code** | Grace Engineering's numeric Company Code in Classic Plex (not the tenant UUID `58f781ba-...` used by the REST API). |
+| **IAM service account or API credentials** | A service account in Rockwell IAM with permission to call Classic Web Services. The old username/password auth has been replaced by IAM SSO — we need the equivalent for programmatic (non-browser) access. This is separate from the Developer Portal Consumer Key we already have for the REST API. |
+| **Company Code** | Grace Engineering's numeric Company Code in Classic Plex (not the tenant UUID `58f781ba-...` used by the REST API). This may still be required as a parameter in SOAP calls even if auth goes through IAM. |
 | **Data Source inventory** | A list of available Data Sources related to: Part Operations, Tool Assignments, Workcenter Assignments, and DCS/Attachments. If custom Data Sources need to be created, we can specify the exact fields we need. |
-| **Confirmation the WSDL is accessible** | `GET https://plexonline.com/Modules/Xmla/XmlDataSource.asmx?WSDL` should return the service definition. |
+| **Guidance on programmatic auth** | How does a script (not a browser) authenticate to the Classic Web Services endpoint now that IAM SSO is required? Is there an OAuth2 client credentials flow, an API key, or a service account token? |
 
 ### What we will NOT do
 
