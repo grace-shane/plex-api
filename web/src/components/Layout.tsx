@@ -4,6 +4,7 @@ import { cn } from "@/lib/utils";
 const navItems = [
   { to: "/", label: "Tools" },
   { to: "/libraries", label: "Libraries" },
+  { to: "/scripts", label: "Scripts" },
 ];
 
 export function Layout() {
@@ -23,7 +24,9 @@ export function Layout() {
                 to={item.to}
                 className={cn(
                   "rounded-md px-3 py-1.5 text-sm transition-colors",
-                  location.pathname === item.to
+                  item.to === "/"
+                    ? location.pathname === "/"
+                    : location.pathname.startsWith(item.to)
                     ? "bg-primary text-primary-foreground"
                     : "text-muted-foreground hover:bg-accent hover:text-accent-foreground"
                 )}
