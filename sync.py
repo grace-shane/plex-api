@@ -63,6 +63,7 @@ from aps_client import APSClient, APSAuthError, APSConfigError, APSHTTPError  # 
 from supabase_client import SupabaseClient  # noqa: E402
 from sync_supabase import sync_library, hash_file  # noqa: E402
 from tool_library_loader import load_all_libraries, CAM_TOOLS_DIR  # noqa: E402
+from enrich import enrich_raw_tools  # noqa: E402
 from validate_library import validate_library, ValidationMode  # noqa: E402
 
 log = logging.getLogger("datum.sync")
@@ -147,7 +148,8 @@ def sync_from_aps(*, dry_run: bool = False) -> SyncReport:
     aps._require_config()
     aps._ensure_token()
 
-    sb = None if dry_run else SupabaseClient()
+    # Supabase client needed for both enrichment (read) and sync (write)
+    sb = SupabaseClient()
 
     contents = aps.get_folder_contents(PROJECT_ID, CAM_TOOLS_FOLDER)
 
@@ -193,6 +195,14 @@ def sync_from_aps(*, dry_run: bool = False) -> SyncReport:
             ))
             log.info("  SKIP: empty library")
             continue
+
+        # Enrich tools missing product-id from reference catalog
+        try:
+            ec = enrich_raw_tools(tools, sb)
+            if ec["enriched"]:
+                log.info("  Enriched %d tools from reference catalog", ec["enriched"])
+        except Exception as e:
+            log.warning("  Enrichment failed (non-fatal): %s", e)
 
         # Validation gate
         vr = validate_library(
@@ -274,10 +284,18 @@ def sync_from_local(*, dry_run: bool = False) -> SyncReport:
         report.end_time = time.monotonic()
         return report
 
-    sb = None if dry_run else SupabaseClient()
+    sb = SupabaseClient()
 
     for library_name, tools in libraries.items():
         log.info("── %s ──", library_name)
+
+        # Enrich tools missing product-id from reference catalog
+        try:
+            ec = enrich_raw_tools(tools, sb)
+            if ec["enriched"]:
+                log.info("  Enriched %d tools from reference catalog", ec["enriched"])
+        except Exception as e:
+            log.warning("  Enrichment failed (non-fatal): %s", e)
 
         # Validation gate
         vr = validate_library(

@@ -141,6 +141,83 @@ def find_reference_match_raw(
     return filtered[0] if filtered else None
 
 
+# ─────────────────────────────────────────────
+# Upstream enrichment (raw Fusion JSON, pre-validation)
+# ─────────────────────────────────────────────
+INCHES_TO_MM = 25.4
+
+
+def enrich_raw_tools(
+    tools: list[dict],
+    client: SupabaseClient,
+) -> dict[str, int]:
+    """
+    Enrich raw Fusion tool dicts in-place before validation.
+
+    For each tool missing ``product-id``, queries the reference_catalog
+    by (type, DC, NOF) geometry match and fills in ``product-id`` and
+    ``vendor`` from the best match.
+
+    Parameters
+    ----------
+    tools : list[dict]
+        Raw Fusion JSON tool dicts (the "data" array). Modified in-place.
+    client : SupabaseClient
+        Client with access to reference_catalog table.
+
+    Returns
+    -------
+    dict
+        ``{"enriched": N, "skipped": M}`` counts.
+    """
+    enriched = 0
+    skipped = 0
+
+    for t in tools:
+        # Skip holders/probes and tools that already have product-id
+        if t.get("type") in ("holder", "probe"):
+            continue
+        pid = t.get("product-id", "")
+        if pid and str(pid).strip():
+            continue
+
+        # Normalize DC to mm for reference catalog lookup
+        geo = t.get("geometry") or {}
+        dc_raw = geo.get("DC")
+        nof_raw = geo.get("NOF")
+        unit = t.get("unit", "inches")
+
+        if dc_raw is None or nof_raw is None:
+            skipped += 1
+            continue
+
+        try:
+            dc_mm = float(dc_raw)
+            if isinstance(unit, str) and unit.lower() == "inches":
+                dc_mm *= INCHES_TO_MM
+            nof = float(nof_raw)
+        except (TypeError, ValueError):
+            skipped += 1
+            continue
+
+        ref = find_reference_match_raw(client, t.get("type", ""), dc_mm, nof)
+        if ref:
+            t["product-id"] = ref["product_id"]
+            if ref.get("vendor") and not t.get("vendor"):
+                t["vendor"] = ref["vendor"]
+            enriched += 1
+            log.info(
+                "  ENRICH: %s -> %s %s",
+                t.get("description", t.get("type", "")),
+                ref["vendor"],
+                ref["product_id"],
+            )
+        else:
+            skipped += 1
+
+    return {"enriched": enriched, "skipped": skipped}
+
+
 def enrich_tools(
     client: SupabaseClient,
     *,
