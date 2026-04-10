@@ -33,6 +33,15 @@ from plex_api import (
 from tool_library_loader import load_all_libraries, CAM_TOOLS_DIR
 from plex_diagnostics import tenant_whoami, list_tenants, get_tenant
 from validate_library import validate_library, ValidationMode
+from aps_client import (
+    APSClient,
+    APSConfigError,
+    APSAuthError,
+    APSHTTPError,
+    APS_CLIENT_ID,
+)
+from sync_supabase import sync_library
+from supabase_client import SupabaseClient
 
 app = Flask(__name__)
 
@@ -536,6 +545,355 @@ def api_fusion_validate():
         return jsonify({"status": "error", "message": str(e), "trace": traceback.format_exc()}), 500
 
 
+# ─────────────────────────────────────────────
+# APS (Autodesk Platform Services) — cloud tool libraries
+# ─────────────────────────────────────────────
+# The APS client is initialized lazily (credentials are optional).
+# OAuth flow: browser hits /api/aps/login → Autodesk consent →
+# callback at /api/aps/callback → tokens stored in memory.
+_aps_client: APSClient | None = None
+
+
+def _get_aps_client() -> APSClient:
+    """Lazy-init the APS client. Raises APSConfigError if creds missing."""
+    global _aps_client
+    if _aps_client is None:
+        _aps_client = APSClient()
+        _aps_client._require_config()
+    return _aps_client
+
+
+@app.route('/api/aps/status')
+def api_aps_status():
+    """Check whether APS is configured and authenticated."""
+    has_config = bool(APS_CLIENT_ID)
+    has_token = False
+    if has_config:
+        try:
+            c = _get_aps_client()
+            has_token = c.tokens.is_valid
+        except APSConfigError:
+            has_config = False
+    return jsonify({
+        "status": "success",
+        "configured": has_config,
+        "authenticated": has_token,
+    })
+
+
+@app.route('/api/aps/login')
+def api_aps_login():
+    """Redirect the browser to Autodesk's OAuth consent page."""
+    try:
+        c = _get_aps_client()
+        url = c.get_authorize_url()
+        return jsonify({"status": "success", "authorize_url": url})
+    except APSConfigError as e:
+        return jsonify({"status": "error", "message": str(e)}), 500
+
+
+@app.route('/api/aps/callback')
+def api_aps_callback():
+    """
+    OAuth callback — Autodesk redirects here with ?code=...
+    Exchanges the code for tokens and confirms success.
+    """
+    code = request.args.get("code")
+    if not code:
+        return jsonify({
+            "status": "error",
+            "message": "Missing 'code' parameter from Autodesk redirect.",
+        }), 400
+    try:
+        c = _get_aps_client()
+        c.exchange_code(code)
+        return jsonify({
+            "status": "success",
+            "message": "APS authentication successful. You can close this tab.",
+            "authenticated": True,
+        })
+    except (APSConfigError, APSAuthError) as e:
+        return jsonify({"status": "error", "message": str(e)}), 500
+
+
+@app.route('/api/aps/hubs')
+def api_aps_hubs():
+    """List Fusion Team hubs accessible to the authenticated user."""
+    try:
+        c = _get_aps_client()
+        hubs = c.get_hubs()
+        return jsonify({"status": "success", "count": len(hubs), "data": hubs})
+    except (APSConfigError, APSAuthError) as e:
+        return jsonify({"status": "error", "message": str(e)}), 401
+    except APSHTTPError as e:
+        return jsonify({"status": "error", "message": str(e)}), e.status
+
+
+@app.route('/api/aps/hubs/<path:hub_id>/projects')
+def api_aps_projects(hub_id):
+    """List projects in a hub."""
+    try:
+        c = _get_aps_client()
+        projects = c.get_projects(hub_id)
+        return jsonify({"status": "success", "count": len(projects), "data": projects})
+    except (APSConfigError, APSAuthError) as e:
+        return jsonify({"status": "error", "message": str(e)}), 401
+    except APSHTTPError as e:
+        return jsonify({"status": "error", "message": str(e)}), e.status
+
+
+@app.route('/api/aps/hubs/<path:hub_id>/projects/<path:project_id>/folders')
+def api_aps_top_folders(hub_id, project_id):
+    """List top-level folders in a project."""
+    try:
+        c = _get_aps_client()
+        folders = c.get_top_folders(hub_id, project_id)
+        return jsonify({"status": "success", "count": len(folders), "data": folders})
+    except (APSConfigError, APSAuthError) as e:
+        return jsonify({"status": "error", "message": str(e)}), 401
+    except APSHTTPError as e:
+        return jsonify({"status": "error", "message": str(e)}), e.status
+
+
+@app.route('/api/aps/projects/<path:project_id>/folders/<path:folder_id>/contents')
+def api_aps_folder_contents(project_id, folder_id):
+    """List items in a folder."""
+    try:
+        c = _get_aps_client()
+        contents = c.get_folder_contents(project_id, folder_id)
+        return jsonify({"status": "success", "count": len(contents), "data": contents})
+    except (APSConfigError, APSAuthError) as e:
+        return jsonify({"status": "error", "message": str(e)}), 401
+    except APSHTTPError as e:
+        return jsonify({"status": "error", "message": str(e)}), e.status
+
+
+@app.route('/api/aps/libraries')
+def api_aps_libraries():
+    """
+    Find all .tools files across all hubs (or a specific hub).
+    Query param: hub_id (optional) — restrict search to one hub.
+    """
+    hub_id = request.args.get("hub_id")
+    try:
+        c = _get_aps_client()
+        libs = c.find_tool_libraries(hub_id=hub_id)
+        return jsonify({"status": "success", "count": len(libs), "data": libs})
+    except (APSConfigError, APSAuthError) as e:
+        return jsonify({"status": "error", "message": str(e)}), 401
+    except APSHTTPError as e:
+        return jsonify({"status": "error", "message": str(e)}), e.status
+
+
+@app.route('/api/aps/items/<path:item_id>/tip')
+def api_aps_item_tip(item_id):
+    """Get the latest version (tip) of an item, including its storage URL."""
+    project_id = request.args.get("project_id")
+    if not project_id:
+        return jsonify({"status": "error", "message": "Missing 'project_id' query param."}), 400
+    try:
+        c = _get_aps_client()
+        tip = c.get_item_tip(project_id, item_id)
+        # Extract storage URL from the tip
+        storage_url = (
+            tip.get("relationships", {})
+            .get("storage", {})
+            .get("meta", {})
+            .get("link", {})
+            .get("href", "")
+        )
+        return jsonify({
+            "status": "success",
+            "data": tip,
+            "storage_url": storage_url,
+        })
+    except (APSConfigError, APSAuthError) as e:
+        return jsonify({"status": "error", "message": str(e)}), 401
+    except APSHTTPError as e:
+        return jsonify({"status": "error", "message": str(e)}), e.status
+
+
+@app.route('/api/aps/cam-tools')
+def api_aps_cam_tools():
+    """
+    List tool libraries in the known XWERKS > Assets > CAMTools folder.
+    Resolves storage URLs for each file so they're ready to download.
+    Much faster than the full hub scan.
+    """
+    # Known IDs from the XWERKS hub discovery
+    project_id = "a.YnVzaW5lc3M6Z3JhY2Vlbmc0I0QyMDI0MTIyMDg0OTIxNzc3Ng"
+    cam_tools_folder = "urn:adsk.wipprod:fs.folder:co.C0zYkNP4TOexre_-hWRhRA"
+
+    try:
+        c = _get_aps_client()
+        contents = c.get_folder_contents(project_id, cam_tools_folder)
+
+        libraries = []
+        for item in contents:
+            if item.get("type") != "items":
+                continue
+            name = item.get("attributes", {}).get("displayName", "")
+            item_id = item["id"]
+
+            # Get the tip version to find the storage URN (for signed download)
+            try:
+                tip = c.get_item_tip(project_id, item_id)
+                storage_url = (
+                    tip.get("relationships", {})
+                    .get("storage", {})
+                    .get("data", {})
+                    .get("id", "")
+                )
+                last_modified = tip.get("attributes", {}).get("lastModifiedTime", "")
+            except APSHTTPError:
+                storage_url = ""
+                last_modified = ""
+
+            libraries.append({
+                "name": name,
+                "item_id": item_id,
+                "storage_url": storage_url,
+                "last_modified": last_modified,
+            })
+
+        return jsonify({
+            "status": "success",
+            "count": len(libraries),
+            "data": libraries,
+        })
+    except (APSConfigError, APSAuthError) as e:
+        return jsonify({"status": "error", "message": str(e)}), 401
+    except APSHTTPError as e:
+        return jsonify({"status": "error", "message": str(e)}), e.status
+    except Exception as e:
+        return jsonify({"status": "error", "message": str(e), "trace": traceback.format_exc()}), 500
+
+
+@app.route('/api/aps/libraries/download')
+def api_aps_library_download():
+    """
+    Download and parse a single tool library from APS.
+    Query param: storage_url (required) — the OSS storage URL from find_tool_libraries.
+    Returns the same shape as /api/fusion/tools (library_name, tool_count, tools_sample).
+    """
+    storage_url = request.args.get("storage_url")
+    if not storage_url:
+        return jsonify({
+            "status": "error",
+            "message": "Missing required 'storage_url' query param.",
+        }), 400
+    name = request.args.get("name", "cloud-library")
+    try:
+        c = _get_aps_client()
+        tools = c.download_tool_library(storage_url)
+        return jsonify({
+            "status": "success",
+            "library_name": name,
+            "tool_count": len(tools),
+            "tools_sample": tools[:5],
+            "data": tools,
+        })
+    except (APSConfigError, APSAuthError) as e:
+        return jsonify({"status": "error", "message": str(e)}), 401
+    except APSHTTPError as e:
+        return jsonify({"status": "error", "message": str(e)}), e.status
+    except Exception as e:
+        return jsonify({"status": "error", "message": str(e), "trace": traceback.format_exc()}), 500
+
+
+@app.route('/api/aps/sync', methods=['POST'])
+def api_aps_sync():
+    """
+    Download all cloud tool libraries from APS and sync them into Supabase.
+
+    Uses the known XWERKS > Assets > CAMTools folder path. For each
+    .json file found, downloads via signed S3, then calls sync_library()
+    to upsert into the libraries/tools/cutting_presets tables.
+
+    Returns per-library results and totals.
+    """
+    project_id = "a.YnVzaW5lc3M6Z3JhY2Vlbmc0I0QyMDI0MTIyMDg0OTIxNzc3Ng"
+    cam_tools_folder = "urn:adsk.wipprod:fs.folder:co.C0zYkNP4TOexre_-hWRhRA"
+
+    try:
+        aps = _get_aps_client()
+        sb = SupabaseClient()
+
+        contents = aps.get_folder_contents(project_id, cam_tools_folder)
+
+        results = []
+        total_tools = 0
+        total_presets = 0
+
+        for item in contents:
+            if item.get("type") != "items":
+                continue
+            name = item.get("attributes", {}).get("displayName", "")
+            if not name.endswith(".json"):
+                continue
+
+            item_id = item["id"]
+            library_name = name.replace(".json", "")
+
+            # Get storage URN from the tip
+            tip = aps.get_item_tip(project_id, item_id)
+            storage_urn = (
+                tip.get("relationships", {})
+                .get("storage", {})
+                .get("data", {})
+                .get("id", "")
+            )
+            if not storage_urn:
+                results.append({
+                    "library": library_name,
+                    "status": "error",
+                    "message": "No storage URN in tip",
+                })
+                continue
+
+            # Download and parse
+            tools = aps.download_tool_library(storage_urn)
+            if not tools:
+                results.append({
+                    "library": library_name,
+                    "status": "skipped",
+                    "message": "Empty or unparseable",
+                    "tools": 0,
+                    "presets": 0,
+                })
+                continue
+
+            # Sync to Supabase
+            counts = sync_library(
+                library_name,
+                tools,
+                client=sb,
+                file_path=f"aps://{item_id}",
+            )
+            total_tools += counts["tools"]
+            total_presets += counts["presets"]
+            results.append({
+                "library": library_name,
+                "status": "success",
+                "tools": counts["tools"],
+                "presets": counts["presets"],
+            })
+
+        return jsonify({
+            "status": "success",
+            "libraries_synced": len([r for r in results if r.get("status") == "success"]),
+            "total_tools": total_tools,
+            "total_presets": total_presets,
+            "results": results,
+        })
+    except (APSConfigError, APSAuthError) as e:
+        return jsonify({"status": "error", "message": str(e)}), 401
+    except APSHTTPError as e:
+        return jsonify({"status": "error", "message": str(e)}), e.status
+    except Exception as e:
+        return jsonify({"status": "error", "message": str(e), "trace": traceback.format_exc()}), 500
+
+
 @app.route('/api/config')
 def api_config():
     """Expose non-secret client config to the UI (base URL, tenant, env)."""
@@ -547,6 +905,7 @@ def api_config():
         "tenant_id": TENANT_ID,
         "has_key": bool(API_KEY),
         "has_secret": bool(API_SECRET),
+        "aps_configured": bool(APS_CLIENT_ID),
     })
 
 

@@ -28,6 +28,11 @@ os.environ.setdefault("PLEX_API_SECRET", "test-secret-do-not-use")
 os.environ.setdefault("SUPABASE_URL", "https://test.supabase.co")
 os.environ.setdefault("SUPABASE_SERVICE_ROLE_KEY", "test-supabase-key-do-not-use")
 
+# Dummy APS credentials so aps_client imports cleanly. Tests patch
+# requests.Session — no real Autodesk calls are made.
+os.environ.setdefault("APS_CLIENT_ID", "test-aps-client-id")
+os.environ.setdefault("APS_CLIENT_SECRET", "test-aps-client-secret")
+
 
 # ─────────────────────────────────────────────
 # Shared fixtures

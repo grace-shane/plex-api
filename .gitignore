@@ -6,6 +6,9 @@ __pycache__/
 .env.local
 .env.*.local
 
+# APS OAuth tokens — local-only, contains access/refresh tokens
+.aps_tokens.json
+
 # Node / frontend
 node_modules/
 
