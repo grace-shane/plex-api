@@ -31,6 +31,25 @@ from pathlib import Path
 _PROJECT_ROOT = Path(__file__).resolve().parent
 
 
+def _find_env_local() -> Path | None:
+    """
+    Walk up from this file's directory until we find a ``.env.local``,
+    or give up at the filesystem root.
+
+    This lets worktrees (e.g. ``.claude/worktrees/foo``) inherit the
+    ``.env.local`` from the main repo root without needing their own copy.
+    """
+    current = _PROJECT_ROOT
+    while True:
+        candidate = current / ".env.local"
+        if candidate.exists():
+            return candidate
+        parent = current.parent
+        if parent == current:  # reached filesystem root
+            return None
+        current = parent
+
+
 def load_env_local(path: Path | str | None = None) -> int:
     """
     Load KEY=VALUE pairs from a .env.local file into os.environ via setdefault.
@@ -38,7 +57,9 @@ def load_env_local(path: Path | str | None = None) -> int:
     Parameters
     ----------
     path : Path | str | None
-        Override the file path. Defaults to ``<project_root>/.env.local``.
+        Override the file path. When ``None``, walks up the directory tree
+        from the project root to find the nearest ``.env.local``. An
+        explicit path always wins over the walk-up search.
 
     Returns
     -------
@@ -47,7 +68,10 @@ def load_env_local(path: Path | str | None = None) -> int:
         (i.e. that were not already present).
     """
     if path is None:
-        path = _PROJECT_ROOT / ".env.local"
+        found = _find_env_local()
+        if found is None:
+            return 0
+        path = found
     else:
         path = Path(path)
 
