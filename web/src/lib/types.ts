@@ -6,6 +6,7 @@ export interface Library {
   file_hash: string | null;
   tool_count: number;
   unit_original: string | null;
+  source_modified_at: string | null;
   ingested_at: string;
   created_at: string;
 }
@@ -48,7 +49,7 @@ export interface Tool {
   updated_at: string;
 
   // Joined
-  libraries?: Pick<Library, "library_name" | "vendor"> | null;
+  libraries?: Pick<Library, "library_name" | "vendor" | "source_modified_at"> | null;
 }
 
 export interface CuttingPreset {

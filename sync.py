@@ -173,6 +173,9 @@ def sync_from_aps(*, dry_run: bool = False) -> SyncReport:
                 .get("data", {})
                 .get("id", "")
             )
+            source_modified_at = (
+                tip.get("attributes", {}).get("lastModifiedTime", "")
+            ) or None
             if not storage_urn:
                 report.results.append(LibraryResult(
                     library_name, "fail", message="No storage URN in tip",
@@ -239,6 +242,7 @@ def sync_from_aps(*, dry_run: bool = False) -> SyncReport:
                 tools,
                 client=sb,
                 file_path=f"aps://{item_id}",
+                source_modified_at=source_modified_at,
             )
             report.results.append(LibraryResult(
                 library_name, "success",

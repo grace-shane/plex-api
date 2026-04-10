@@ -388,6 +388,7 @@ def sync_library(
     client: SupabaseClient,
     file_path: str | None = None,
     file_hash: str | None = None,
+    source_modified_at: str | None = None,
 ) -> dict[str, int]:
     """
     Upsert one library worth of Fusion tools into Supabase.
@@ -406,6 +407,9 @@ def sync_library(
     file_hash : str | None
         SHA-256 of the source file. Stored on the library row so future
         runs can skip unchanged files.
+    source_modified_at : str | None
+        ISO 8601 timestamp from APS ``lastModifiedTime``. When the
+        library file was last saved in Fusion Hub.
 
     Returns
     -------
@@ -428,6 +432,8 @@ def sync_library(
         "unit_original": unit_original,
         "ingested_at": datetime.now(timezone.utc).isoformat(),
     }
+    if source_modified_at:
+        library_row["source_modified_at"] = source_modified_at
     lib_result = client.upsert(
         "libraries",
         library_row,

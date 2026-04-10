@@ -33,7 +33,7 @@ export function Layout() {
             ))}
           </nav>
           <a
-            href="https://graceeng.com"
+            href="https://www.graceeng.com"
             target="_blank"
             rel="noopener noreferrer"
             className="ml-auto text-xs text-muted-foreground hover:underline"
