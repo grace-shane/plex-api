@@ -68,28 +68,36 @@ Classic schema via Data Sources. This would let Datum:
 
 ### What we found so far (April 10, 2026)
 
-We tested the Classic Web Services endpoint from two angles:
+We tested the Classic Web Services endpoint from multiple angles:
 
 1. **Unauthenticated GET** to
    `https://www.plexonline.com/Modules/Xmla/XmlDataSource.asmx?WSDL`
    — returned the Plex login page (IAM Login button only, no
-   username/password form). This confirms the endpoint path exists and
+   username/password form). Confirms the endpoint path exists and
    Plex Classic now authenticates through Rockwell IAM.
 
 2. **Authenticated GET** (logged into Plex via IAM in the same browser
-   session, then navigated to the WSDL URL) — returned a **system error
-   page**: *"A system error has occurred on this page. Plex personnel
-   have been automatically notified and are working on the problem."*
+   session, then navigated to the WSDL URL in the same tab) — returned
+   a **system error page**: *"A system error has occurred on this page.
+   Plex personnel have been automatically notified and are working on
+   the problem."* The Plex header bar rendered (session is valid), but
+   the ASMX endpoint itself threw a server-side exception.
 
-The error occurs after authentication succeeds (the Plex header bar
-renders, meaning the session is valid). The ASMX endpoint itself is
-throwing a server-side exception. Possible causes:
+3. **Session-prefixed URL** — Classic Plex URLs include a per-login
+   session GUID (e.g. `plexonline.com/0daa8ab4-4c2e-.../Modules/...`).
+   We tried `plexonline.com/{session-guid}/Modules/Xmla/XmlDataSource.asmx?WSDL`
+   but navigating outside the Classic UI window forces a re-login, which
+   generates a new session GUID. The ASMX URL was stripped during the
+   redirect and never reached.
 
-- Classic Web Services may not be enabled for Grace Engineering's
-  subscription
-- The ASMX endpoint may have been deprecated or broken during the
-  IAM migration
-- The endpoint URL may have changed to a different path
+4. **Classic UI navigation** — The Plex Classic window locks out the
+   address bar (kiosk-style). There is no way to navigate to the ASMX
+   endpoint from within the Classic session.
+
+**Conclusion:** The ASMX endpoint exists but is non-functional for
+Grace Engineering's authenticated user. This is either a subscription
+issue, a deprecation, or a configuration that needs Plex support to
+enable.
 
 ### What we need
 
