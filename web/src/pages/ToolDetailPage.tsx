@@ -15,15 +15,24 @@ import {
 } from "@/components/ui/table";
 
 const MM_PER_INCH = 25.4;
+const STORAGE_KEY_IMPERIAL = "datum-imperial";
 
-function UnitToggle({ imperial, setImperial }: { imperial: boolean; setImperial: (v: boolean) => void }) {
+function readImperialPref(): boolean {
+  try {
+    return localStorage.getItem(STORAGE_KEY_IMPERIAL) !== "false";
+  } catch {
+    return true;
+  }
+}
+
+function UnitToggle({ imperial, onToggle }: { imperial: boolean; onToggle: () => void }) {
   return (
     <label className="flex cursor-pointer items-center gap-2 text-sm">
       <span className={imperial ? "text-muted-foreground" : "font-medium"}>mm</span>
       <button
         role="switch"
         aria-checked={imperial}
-        onClick={() => setImperial(!imperial)}
+        onClick={onToggle}
         className={`relative inline-flex h-5 w-9 shrink-0 items-center rounded-full border transition-colors ${
           imperial ? "bg-primary" : "bg-muted"
         }`}
@@ -75,7 +84,7 @@ export function ToolDetailPage() {
   const [tool, setTool] = useState<Tool | null>(null);
   const [presets, setPresets] = useState<CuttingPreset[]>([]);
   const [loading, setLoading] = useState(true);
-  const [imperial, setImperial] = useState(false);
+  const [imperial, setImperial] = useState(readImperialPref);
 
   useEffect(() => {
     async function fetch() {
@@ -130,7 +139,11 @@ export function ToolDetailPage() {
           </p>
         </div>
         <div className="flex items-center gap-3">
-          <UnitToggle imperial={imperial} setImperial={setImperial} />
+          <UnitToggle imperial={imperial} onToggle={() => {
+            const next = !imperial;
+            setImperial(next);
+            try { localStorage.setItem(STORAGE_KEY_IMPERIAL, String(next)); } catch {}
+          }} />
           <Badge variant="secondary">{tool.type}</Badge>
           {tool.plex_supply_item_id ? (
             <Badge variant="default">Synced to Plex</Badge>

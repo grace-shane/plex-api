@@ -32,9 +32,14 @@ export function Layout() {
               </Link>
             ))}
           </nav>
-          <div className="ml-auto text-xs text-muted-foreground">
+          <a
+            href="https://graceeng.com"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="ml-auto text-xs text-muted-foreground hover:underline"
+          >
             Grace Engineering
-          </div>
+          </a>
         </div>
       </header>
       <main className="mx-auto max-w-6xl px-4 py-6">
