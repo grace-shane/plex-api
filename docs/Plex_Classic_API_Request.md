@@ -142,12 +142,31 @@ Verified working response (Data Source 9481 = `Part_Group_Get`):
 The production endpoint (`api.plexonline.com`) is live — it prompts for
 HTTP Basic auth when accessed in a browser.
 
-### What we still need
+### Credentials tested (April 10) — neither works
+
+We tested two sets of credentials against the HTTP Basic auth prompt at
+`api.plexonline.com/DataSource/Service.asmx`:
+
+| Account | Type | Result |
+|---|---|---|
+| Shane Waid IAM login | Regular Plex user (IAM SSO) | **Rejected** |
+| `g5ediadmin` | Developer Portal admin (creates API keys) | **Rejected** |
+
+Neither account authenticates against the Classic Web Services endpoint.
+The endpoint requires a **dedicated Web Service user account** with
+specific permissions — this is separate from both IAM user logins and
+Developer Portal admin accounts.
+
+### What we need
+
+We need **one thing**: a username/password that authenticates against
+`https://api.plexonline.com/DataSource/Service.asmx` via HTTP Basic
+auth. Everything else is ready to go.
 
 | Item | Details |
 |---|---|
-| **HTTP Basic credentials** | A username/password that authenticates against `api.plexonline.com`. This may be our existing Plex user login, or a dedicated service/API account. Need to test. |
-| **Data Source inventory** | A list of Data Source Keys for: Part Operations, Tool Assignments, Workcenter Assignments, and DCS/Attachments. The example uses key `9481` (`Part_Group_Get`). We need the keys for tool-related data sources. |
+| **Web Service credentials** | A username/password with Web Service permission enabled in Plex. Neither our IAM user login nor the `g5ediadmin` Developer Portal account works. This account likely needs to be created or enabled by a Plex system admin or CSM — there is typically a "Web Service" permission flag in Classic Plex user management. |
+| **Data Source inventory** | Once authenticated, we need Data Source Keys for: Part Operations, Tool Assignments, Workcenter Assignments, and DCS/Attachments. The example uses key `9481` (`Part_Group_Get`). We need the keys for tool-related data sources. If custom Data Sources need to be created, we can specify the exact fields. |
 
 ### What we will NOT do
 
