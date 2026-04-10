@@ -6,6 +6,9 @@ __pycache__/
 .env.local
 .env.*.local
 
+# Node / frontend
+node_modules/
+
 # editor / IDE
 .vscode/
 .idea/

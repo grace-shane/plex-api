@@ -6,6 +6,12 @@
       "runtimeExecutable": "py",
       "runtimeArgs": ["run_dev.py"],
       "port": 5000
+    },
+    {
+      "name": "web",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": ["run", "dev", "--prefix", "web"],
+      "port": 5173
     }
   ]
 }
