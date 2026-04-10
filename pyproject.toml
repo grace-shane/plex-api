@@ -1,0 +1,39 @@
+[build-system]
+requires = ["setuptools>=68.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "datum"
+version = "0.1.0"
+description = "Fusion 360 tool library sync pipeline — Grace Engineering"
+requires-python = ">=3.11"
+dependencies = [
+    "flask>=3.0",
+    "requests>=2.31",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.0",
+]
+
+[project.scripts]
+datum-sync = "sync:cli"
+
+[tool.setuptools]
+# Flat layout — all modules live at the repo root, no src/ directory.
+py-modules = [
+    "app",
+    "aps_client",
+    "bootstrap",
+    "build_supply_item_payload",
+    "plex_api",
+    "plex_diagnostics",
+    "supabase_client",
+    "sync",
+    "sync_supabase",
+    "tool_library_loader",
+    "validate_library",
+]
+# Don't try to auto-discover packages — there are none.
+packages = []
