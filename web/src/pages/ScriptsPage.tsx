@@ -15,13 +15,43 @@ interface RefMatch {
   exact_oal: boolean;
 }
 
+interface HolderMatch {
+  product_id: string;
+  vendor: string;
+  description: string | null;
+  bore_diameter: number | null;
+  gauge_length: number | null;
+  taper_type: string | null;
+  product_link: string | null;
+}
+
 interface ToolFix extends Tool {
   generatedDescription: string;
   refMatches: RefMatch[];
   selectedRef: RefMatch | null;
+  holderMatches: HolderMatch[];
+  selectedHolder: HolderMatch | null;
   accepted: boolean;
   useVendor: string;
   useProductId: string;
+  useHolderVendor: string;
+  useHolderProductId: string;
+}
+
+// Map library name prefixes to taper types for holder matching
+const LIBRARY_TAPER_MAP: Record<string, string> = {
+  "BROTHER SPEEDIO": "BT30",
+  "MAZAK C600": "BT40",
+  "848": "BT30",
+  "865": "BT40",
+};
+
+function inferTaperType(libraryName: string | undefined): string | null {
+  if (!libraryName) return null;
+  for (const [prefix, taper] of Object.entries(LIBRARY_TAPER_MAP)) {
+    if (libraryName.toUpperCase().startsWith(prefix.toUpperCase())) return taper;
+  }
+  return null;
 }
 
 // ─── Description generation ────────────────────────────────
@@ -148,6 +178,60 @@ async function lookupRefs(
   return result;
 }
 
+// ─── Holder catalog lookup ──────────────────────────────────
+
+async function lookupHolders(
+  tools: Tool[]
+): Promise<Map<string, HolderMatch[]>> {
+  const result = new Map<string, HolderMatch[]>();
+
+  // Group by (taper, shank diameter)
+  const geometries = new Map<string, Tool[]>();
+  for (const t of tools) {
+    if (t.geo_sfdm == null) continue;
+    const taper = inferTaperType(t.libraries?.library_name);
+    if (!taper) continue;
+    const key = `${taper}|${t.geo_sfdm.toFixed(3)}`;
+    const list = geometries.get(key) ?? [];
+    list.push(t);
+    geometries.set(key, list);
+  }
+
+  for (const [key, group] of geometries) {
+    const [taper, sfdmStr] = key.split("|");
+    const sfdm = parseFloat(sfdmStr);
+
+    const { data } = await supabase
+      .from("holder_catalog")
+      .select("product_id, vendor, description, bore_diameter, gauge_length, taper_type, product_link")
+      .eq("taper_type", taper)
+      .gte("bore_diameter", sfdm - 0.5)
+      .lte("bore_diameter", sfdm + 0.5)
+      .limit(10);
+
+    if (!data || data.length === 0) continue;
+
+    for (const tool of group) {
+      const matches: HolderMatch[] = data.map((r) => ({
+        product_id: r.product_id,
+        vendor: r.vendor ?? "Haas",
+        description: r.description,
+        bore_diameter: r.bore_diameter,
+        gauge_length: r.gauge_length,
+        taper_type: r.taper_type,
+        product_link: r.product_link,
+      }));
+
+      // Sort by gauge length ascending
+      matches.sort((a, b) => (a.gauge_length ?? 0) - (b.gauge_length ?? 0));
+
+      result.set(tool.id, matches);
+    }
+  }
+
+  return result;
+}
+
 // ─── Fusion script builder ─────────────────────────────────
 
 function buildFusionScript(tools: ToolFix[]): string {
@@ -160,7 +244,9 @@ function buildFusionScript(tools: ToolFix[]): string {
     const desc = t.generatedDescription.replace(/"/g, '\\"');
     const vendor = (t.useVendor || "MSC").replace(/"/g, '\\"');
     const pid = (t.useProductId || "").replace(/"/g, '\\"');
-    return `    "${t.fusion_guid}": {"description": "${desc}", "vendor": "${vendor}", "product_id": "${pid}"},`;
+    const hVendor = (t.useHolderVendor || "").replace(/"/g, '\\"');
+    const hPid = (t.useHolderProductId || "").replace(/"/g, '\\"');
+    return `    "${t.fusion_guid}": {"description": "${desc}", "vendor": "${vendor}", "product_id": "${pid}", "holder_vendor": "${hVendor}", "holder_product_id": "${hPid}"},`;
   }).join("\n");
 
   return `# ─────────────────────────────────────────────────────────────
@@ -182,10 +268,15 @@ UPDATES = {
 ${entries}
 }
 
-FIELD_MAP = {
+TOOL_FIELDS = {
     "description": "description",
     "vendor": "vendor",
     "product_id": "product-id",
+}
+
+HOLDER_FIELDS = {
+    "holder_vendor": "vendor",
+    "holder_product_id": "product-id",
 }
 
 def run(context):
@@ -212,7 +303,9 @@ def run(context):
                     continue
 
                 fields = UPDATES[guid]
-                for key, fusion_name in FIELD_MAP.items():
+
+                # Update tool-level fields
+                for key, fusion_name in TOOL_FIELDS.items():
                     val = fields.get(key, "")
                     if not val:
                         continue
@@ -220,6 +313,18 @@ def run(context):
                     if param:
                         param.value.stringValue = val
                         lib_changed = True
+
+                # Update holder fields (if tool has a holder)
+                holder = tool.holder
+                if holder:
+                    for key, fusion_name in HOLDER_FIELDS.items():
+                        val = fields.get(key, "")
+                        if not val:
+                            continue
+                        param = holder.parameters.itemByName(fusion_name)
+                        if param:
+                            param.value.stringValue = val
+                            lib_changed = True
 
                 updated += 1
 
@@ -260,19 +365,28 @@ export function ScriptsPage() {
       }
 
       const rawTools = data ?? [];
-      const refs = await lookupRefs(rawTools);
+      const [refs, holders] = await Promise.all([
+        lookupRefs(rawTools),
+        lookupHolders(rawTools),
+      ]);
 
       const fixes: ToolFix[] = rawTools.map((t) => {
         const matches = refs.get(t.id) ?? [];
         const best = matches.find((m) => m.exact_oal) ?? matches[0] ?? null;
+        const hMatches = holders.get(t.id) ?? [];
+        const bestHolder = hMatches[0] ?? null;
         return {
           ...t,
           generatedDescription: generateDescription(t),
           refMatches: matches,
           selectedRef: best,
+          holderMatches: hMatches,
+          selectedHolder: bestHolder,
           accepted: true,
           useVendor: best?.vendor || "MSC",
           useProductId: best?.product_id || "",
+          useHolderVendor: bestHolder?.vendor || "",
+          useHolderProductId: bestHolder?.product_id || "",
         };
       });
 
@@ -291,6 +405,14 @@ export function ScriptsPage() {
       selectedRef: ref,
       useVendor: ref?.vendor || "MSC",
       useProductId: ref?.product_id || "",
+    });
+  }
+
+  function selectHolder(toolId: string, holder: HolderMatch | null) {
+    updateTool(toolId, {
+      selectedHolder: holder,
+      useHolderVendor: holder?.vendor || "",
+      useHolderProductId: holder?.product_id || "",
     });
   }
 
@@ -434,6 +556,66 @@ export function ScriptsPage() {
                         <span className="text-[10px] text-muted-foreground">
                           No reference catalog match — defaulting to MSC
                         </span>
+                      )}
+
+                      {/* Holder section */}
+                      {tool.holderMatches.length > 0 && (
+                        <div className="space-y-1 border-t border-border pt-2 mt-2">
+                          <div className="flex items-center gap-3 text-sm">
+                            <label className="flex items-center gap-1.5">
+                              <span className="text-xs text-muted-foreground">Holder Vendor</span>
+                              <input
+                                type="text"
+                                value={tool.useHolderVendor}
+                                onChange={(e) => updateTool(tool.id, { useHolderVendor: e.target.value })}
+                                className="h-7 w-24 rounded border border-border bg-background px-2 text-xs font-mono"
+                              />
+                            </label>
+                            <label className="flex items-center gap-1.5">
+                              <span className="text-xs text-muted-foreground">Holder Part #</span>
+                              <input
+                                type="text"
+                                value={tool.useHolderProductId}
+                                onChange={(e) => updateTool(tool.id, { useHolderProductId: e.target.value })}
+                                className="h-7 w-32 rounded border border-border bg-background px-2 text-xs font-mono"
+                              />
+                            </label>
+                          </div>
+                          <span className="text-[10px] uppercase tracking-wider text-muted-foreground">
+                            Holder catalog matches ({inferTaperType(tool.libraries?.library_name)} taper)
+                          </span>
+                          <div className="flex flex-wrap gap-1">
+                            {tool.holderMatches.map((h, i) => (
+                              <button
+                                key={i}
+                                onClick={() => selectHolder(tool.id, h)}
+                                className={`rounded border px-2 py-0.5 text-[11px] font-mono transition-colors ${
+                                  tool.selectedHolder === h
+                                    ? "border-primary bg-primary/10 text-foreground"
+                                    : "border-border text-muted-foreground hover:bg-accent"
+                                }`}
+                                title={h.description || undefined}
+                              >
+                                {h.product_id}
+                              </button>
+                            ))}
+                            <button
+                              onClick={() => selectHolder(tool.id, null)}
+                              className={`rounded border px-2 py-0.5 text-[11px] transition-colors ${
+                                tool.selectedHolder === null
+                                  ? "border-primary bg-primary/10 text-foreground"
+                                  : "border-border text-muted-foreground hover:bg-accent"
+                              }`}
+                            >
+                              skip holder
+                            </button>
+                          </div>
+                          {tool.selectedHolder?.description && (
+                            <span className="text-[10px] text-muted-foreground">
+                              {tool.selectedHolder.description}
+                            </span>
+                          )}
+                        </div>
                       )}
                     </div>
                   </div>
