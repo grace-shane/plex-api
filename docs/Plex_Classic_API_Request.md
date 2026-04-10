@@ -94,20 +94,60 @@ We tested the Classic Web Services endpoint from multiple angles:
    address bar (kiosk-style). There is no way to navigate to the ASMX
    endpoint from within the Classic session.
 
-**Conclusion:** The ASMX endpoint exists but is non-functional for
-Grace Engineering's authenticated user. This is either a subscription
-issue, a deprecation, or a configuration that needs Plex support to
-enable.
+**Conclusion (tests 1-4):** The old ASMX path at
+`plexonline.com/Modules/Xmla/XmlDataSource.asmx` is broken/deprecated.
 
-### What we need
+### Breakthrough: correct endpoint found (late April 10)
+
+The correct Classic Web Services endpoint is on a **separate subdomain**:
+
+| Environment | URL |
+|---|---|
+| **Production** | `https://api.plexonline.com/DataSource/Service.asmx` |
+| **Test** | `https://testapi.plexonline.com/DataSource/Service.asmx` |
+
+Configuration:
+- **Auth:** HTTP Basic — `Authorization: Basic <base64(username:password)>`
+- **Method:** POST
+- **Content-Type:** `application/soap+xml`
+- **SOAP namespace:** `http://www.plexus-online.com/DataSource`
+- **Operation:** `ExecuteDataSource` with a `DataSourceKey` (integer)
+
+Example SOAP envelope:
+```xml
+<?xml version="1.0" encoding="utf-8"?>
+<soap:Envelope
+    xmlns:soap="http://www.w3.org/2003/05/soap-envelope"
+    xmlns:dat="http://www.plexus-online.com/DataSource">
+  <soap:Body>
+    <dat:ExecuteDataSource
+        xmlns:dat="http://www.plexus-online.com/DataSource">
+      <dat:ExecuteDataSourceRequest>
+        <dat:DataSourceKey>9481</dat:DataSourceKey>
+        <dat:InputParameters>
+          <dat:InputParameter>
+            <dat:Name>Part_Group_Key</dat:Name>
+            <dat:Value>1234</dat:Value>
+          </dat:InputParameter>
+        </dat:InputParameters>
+      </dat:ExecuteDataSourceRequest>
+    </dat:ExecuteDataSource>
+  </soap:Body>
+</soap:Envelope>
+```
+
+Verified working response (Data Source 9481 = `Part_Group_Get`):
+`StatusNo=0, Error=false, Message=Success`
+
+The production endpoint (`api.plexonline.com`) is live — it prompts for
+HTTP Basic auth when accessed in a browser.
+
+### What we still need
 
 | Item | Details |
 |---|---|
-| **Is Classic Web Services available to us?** | The ASMX endpoint at `plexonline.com/Modules/Xmla/XmlDataSource.asmx` returns a system error when accessed by an authenticated Grace Engineering user. Is this feature enabled for our subscription? If not, what does it take to enable it? |
-| **Correct endpoint URL** | If the ASMX path has moved during the IAM migration, what is the current URL for programmatic Data Source access? |
-| **Programmatic auth method** | How does a script (not a browser) authenticate to Classic Web Services now that IAM SSO is required? Is there an OAuth2 client credentials flow, an API key, or a service account token? This is separate from the Developer Portal Consumer Key we already use for the REST API at `connect.plex.com`. |
-| **Company Code** | Grace Engineering's numeric Company Code in Classic Plex (not the tenant UUID `58f781ba-...` used by the REST API). This may be required as a parameter in SOAP calls. |
-| **Data Source inventory** | If Web Services is available (or can be enabled), we need a list of Data Sources related to: Part Operations, Tool Assignments, Workcenter Assignments, and DCS/Attachments. If custom Data Sources need to be created, we can specify the exact fields we need. |
+| **HTTP Basic credentials** | A username/password that authenticates against `api.plexonline.com`. This may be our existing Plex user login, or a dedicated service/API account. Need to test. |
+| **Data Source inventory** | A list of Data Source Keys for: Part Operations, Tool Assignments, Workcenter Assignments, and DCS/Attachments. The example uses key `9481` (`Part_Group_Get`). We need the keys for tool-related data sources. |
 
 ### What we will NOT do
 

@@ -251,13 +251,16 @@ data. The older **Classic Web Services** at `plexonline.com` can access
 virtually the entire Classic schema via Data Sources (parameterized
 stored procedures).
 
-- **Endpoint:** `POST https://plexonline.com/Modules/Xmla/XmlDataSource.asmx`
-- **WSDL:** append `?WSDL` to the endpoint URL
-- **Auth:** Web Service User account (username/password + Company Code).
+- **Production endpoint:** `POST https://api.plexonline.com/DataSource/Service.asmx`
+- **Test endpoint:** `POST https://testapi.plexonline.com/DataSource/Service.asmx`
+- **Auth:** HTTP Basic — `Authorization: Basic <base64(username:password)>`
   **NOT the Developer Portal Consumer Key** — completely separate credentials.
-- **Format:** SOAP/XML (or JSON wrapper at `/api/datasources/{key}/execute`)
+- **Content-Type:** `application/soap+xml`
+- **Format:** SOAP/XML with `ExecuteDataSource` operation
+- **Namespace:** `http://www.plexus-online.com/DataSource`
 - **Licensing:** Included with base Plex subscription (no extra cost)
 - **ID format:** Integer keys (not UUIDs — mapping needed if mixing with REST API)
+- **Status:** Endpoint is live (prompts for HTTP Basic auth). Credentials TBD.
 
 **What it can access that REST cannot:**
 
