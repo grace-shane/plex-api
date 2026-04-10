@@ -356,14 +356,25 @@ def main(argv: list[str] | None = None) -> int:
         action="store_true",
         help="Enable debug-level logging",
     )
+    parser.add_argument(
+        "--log-file",
+        type=str,
+        default=None,
+        help="Append logs to this file (in addition to stdout)",
+    )
     args = parser.parse_args(argv)
 
     # Logging setup
     level = logging.DEBUG if args.verbose else logging.INFO
+    handlers: list[logging.Handler] = [logging.StreamHandler()]
+    if args.log_file:
+        fh = logging.FileHandler(args.log_file, encoding="utf-8")
+        handlers.append(fh)
     logging.basicConfig(
         level=level,
         format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
         datefmt="%Y-%m-%d %H:%M:%S",
+        handlers=handlers,
     )
 
     log.info("Datum sync starting%s", " (dry-run)" if args.dry_run else "")
