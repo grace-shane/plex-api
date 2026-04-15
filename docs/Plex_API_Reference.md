@@ -100,6 +100,9 @@ Record counts are as of **2026-04-09** unless noted. Schemas captured
 | **200** | `production/v1/production-definitions/workcenters` | **143** | 21 MILLs. ⚠️ **Primary key is `workcenterId`, not `id`.** Fields: `buildingCode, buildingId, ipAddress, name, plcName, productionLineId, tankSilo, workcenterCode, workcenterGroup, workcenterId, workcenterType`. |
 | **200** | `production/v1/production-definitions/workcenters/{id}` | — | Same 11 fields as list view. |
 | **200** | `purchasing/v1/purchase-orders` | — | **44.2 MB** unfiltered. Full PO history. `?updatedAfter=` filter confirmed as a silent no-op on 2026-04-09 (byte-identical response). |
+| **200** | `inventory/v1-beta1/inventory-history/item-adjustments?ItemId=<uuid>&StartDate=<ISO>&EndDate=<ISO>` | varies | **Supply-item adjustment log.** 31/1,109 tools have non-empty history (2026-04-15). Fields: `adjustmentDate, itemId, itemNo, location, locationId, quantity, transactionType`. Summing `quantity` (already signed) gives running balance. **Dates MUST be full ISO with `Z`** (plain YYYY-MM-DD → 400 ARGUMENT_INVALID). See §3.6. |
+| **200** | `inventory/v1/inventory-tracking/containers` | **10,676** | On-hand for parts (RAW/WIP/FG). Fields include `quantity, partId, partNo, location, locationId, serialNo, lotId, inventoryType`. Disjoint from supply-items (tools). |
+| **200** | `inventory/v1/inventory-history/container-adjustments?BeginDate=<ISO>&EndDate=<ISO>` | **6,298** | Per-container adjustment log. Fields: `adjustmentCode, adjustmentDate, location, partId, partNumber, quantity, serialNo, ...`. |
 | **200** | `scheduling/v1/jobs` | TBD | **NEW — discovered 2026-04-09.** Returns 200 but **15.8s response time**, so the body is large. Schema, record count, and whether it carries tool/operation/workcenter FKs all TBD. Worth a deep-dive as follow-up to issue #5 (routing/operation linkage) — if jobs link to tools, we get the missing operation→tool mapping for free. |
 
 ### Probed — returned 404 (not subscribed or doesn't exist)
@@ -155,6 +158,27 @@ from the 2026-04-08 Decision Log):
 - `"Tap #8-32 H3 Spiral Point"`
 
 Fusion will insert clean vendor part numbers like `"990910"`, so expect essentially zero collision with existing Plex records on first sync.
+
+### §3.6 — Supply-item `item-adjustments` and the `transactionType` sign table
+
+Endpoint: `GET inventory/v1-beta1/inventory-history/item-adjustments`
+Required params: `ItemId` (supply-item UUID), `StartDate`, `EndDate` (full ISO with `Z`).
+
+**Key finding (probed 2026-04-15 across all 1,109 `category="Tools & Inserts"` supply-items):** the `quantity` field is delivered **pre-signed** — positive for additions, negative for removals. You do NOT need to apply sign based on `transactionType`. Sum `quantity` directly to get the running balance.
+
+The enumerated `transactionType` values across 2,005 real records:
+
+| transactionType | records | qty_min | qty_max | quantity sign | interpretation |
+|---|---:|---:|---:|---|---|
+| `PO Receipt` | 1,479 | 1.0 | 100.0 | always `+` | vendor received into stock |
+| `Checkout` | 326 | -75.0 | -1.0 | always `-` | pulled from crib to production |
+| `Correction` | 125 | -6433.0 | 78.0 | either | manual count adjustment, signed |
+| `Check In` | 74 | 1.0 | 103.0 | always `+` | returned to crib / physical recount up |
+| `null` | 1 | 19.0 | 19.0 | — | one record with missing `transactionType`; treat as data-quality issue, still sum the qty |
+
+**Implementation rule:** `running_balance = sum(r.quantity for r in records)`. No sign flip, no lookup table. If future records introduce a new `transactionType`, the pre-signed `quantity` contract should still hold — but the sync script should log any unknown `transactionType` values it encounters as a warning for review.
+
+Of Grace's 1,109 tools, **31 (2.8%) have non-empty adjustment history.** The remaining 1,078 have never been tracked in Plex inventory at all — a data-quality finding, not an API limitation. Datum distinguishes this in `tools.qty_tracked`: TRUE = ≥1 record, FALSE = linked but Plex has no history (display as "not tracked"), NULL = not yet checked by sync.
 
 ### Where tooling data actually lives
 
