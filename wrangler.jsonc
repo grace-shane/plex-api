@@ -1,0 +1,9 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "datum",
+  "compatibility_date": "2026-04-15",
+  "assets": {
+    "directory": "./web/dist",
+    "not_found_handling": "single-page-application"
+  }
+}
