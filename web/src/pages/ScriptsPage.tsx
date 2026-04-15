@@ -286,6 +286,10 @@ export function ScriptsPage() {
     setTools((prev) => prev.map((t) => t.id === id ? { ...t, ...patch } : t));
   }
 
+  function setAllAccepted(accepted: boolean) {
+    setTools((prev) => prev.map((t) => ({ ...t, accepted })));
+  }
+
   function selectRef(toolId: string, ref: RefMatch | null) {
     updateTool(toolId, {
       selectedRef: ref,
@@ -338,6 +342,21 @@ export function ScriptsPage() {
         </Card>
       ) : (
         <>
+          <div className="flex items-center gap-2 text-xs">
+            <button
+              onClick={() => setAllAccepted(true)}
+              className="rounded-md border border-border px-3 py-1.5 transition-colors hover:bg-accent"
+            >
+              Select all
+            </button>
+            <button
+              onClick={() => setAllAccepted(false)}
+              className="rounded-md border border-border px-3 py-1.5 transition-colors hover:bg-accent"
+            >
+              Deselect all
+            </button>
+          </div>
+
           <div className="space-y-3">
             {tools.map((tool) => (
               <Card
