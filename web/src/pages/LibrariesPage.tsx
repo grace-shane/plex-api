@@ -4,6 +4,7 @@ import { supabase } from "@/lib/supabase";
 import type { Library } from "@/lib/types";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { relativeTime } from "@/lib/utils";
 
 export function LibrariesPage() {
   const [libraries, setLibraries] = useState<Library[]>([]);
@@ -30,14 +31,33 @@ export function LibrariesPage() {
     return <div className="py-12 text-center text-muted-foreground">Loading libraries...</div>;
   }
 
+  const lastSyncIso = libraries.reduce<string | null>((acc, lib) => {
+    if (!lib.ingested_at) return acc;
+    if (!acc || lib.ingested_at > acc) return lib.ingested_at;
+    return acc;
+  }, null);
+
   return (
     <div className="space-y-4">
-      <h1 className="text-2xl font-semibold tracking-tight">
-        Libraries{" "}
-        <span className="text-muted-foreground font-normal">
-          ({libraries.length})
-        </span>
-      </h1>
+      <div className="flex items-baseline justify-between gap-3 flex-wrap">
+        <h1 className="text-2xl font-semibold tracking-tight">
+          Libraries{" "}
+          <span className="text-muted-foreground font-normal">
+            ({libraries.length})
+          </span>
+        </h1>
+        {lastSyncIso && (
+          <div
+            className="text-xs text-muted-foreground"
+            title={new Date(lastSyncIso).toLocaleString()}
+          >
+            Last sync:{" "}
+            <span className="font-medium text-foreground">
+              {relativeTime(lastSyncIso)}
+            </span>
+          </div>
+        )}
+      </div>
 
       {libraries.length === 0 ? (
         <Card>
@@ -65,8 +85,12 @@ export function LibrariesPage() {
                     <Badge variant="secondary">{lib.tool_count}</Badge>
                   </div>
                   <div className="flex justify-between">
-                    <span className="text-muted-foreground">Ingested</span>
-                    <span>{new Date(lib.ingested_at).toLocaleDateString()}</span>
+                    <span className="text-muted-foreground">Last synced</span>
+                    <span
+                      title={new Date(lib.ingested_at).toLocaleString()}
+                    >
+                      {relativeTime(lib.ingested_at)}
+                    </span>
                   </div>
                 </CardContent>
               </Card>
