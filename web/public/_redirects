@@ -1,0 +1,3 @@
+# SPA fallback for react-router — any unmatched path serves index.html
+# so deep links like /tools/:id survive refresh on Cloudflare Pages.
+/*    /index.html   200
