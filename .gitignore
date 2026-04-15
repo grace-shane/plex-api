@@ -35,5 +35,8 @@ outputs/
 # Claude Code worktree scratch space
 .claude/worktrees/
 
+# Ad-hoc probe scripts, one-off dumps, and similar throwaway work
+scratch/
+
 # Claude Code per-machine permissions cache (regenerated on demand)
 .claude/settings.local.json
