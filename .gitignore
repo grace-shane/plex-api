@@ -37,3 +37,9 @@ outputs/
 
 # Claude Code per-machine permissions cache (regenerated on demand)
 .claude/settings.local.json
+
+# wrangler files
+.wrangler
+.dev.vars*
+!.dev.vars.example
+!.env.example
