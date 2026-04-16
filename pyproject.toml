@@ -22,6 +22,7 @@ datum-sync = "sync:cli"
 datum-sync-inventory = "sync_tool_inventory:cli"
 datum-ingest-reference = "ingest_reference:main"
 datum-enrich = "enrich:main"
+datum-populate-supply-items = "populate_supply_items:cli"
 
 [tool.setuptools]
 # Flat layout — all modules live at the repo root, no src/ directory.
@@ -30,6 +31,7 @@ py-modules = [
     "aps_client",
     "bootstrap",
     "build_supply_item_payload",
+    "populate_supply_items",
     "plex_api",
     "plex_diagnostics",
     "supabase_client",
