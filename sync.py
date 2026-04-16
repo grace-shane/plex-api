@@ -64,6 +64,7 @@ from supabase_client import SupabaseClient  # noqa: E402
 from sync_supabase import sync_library, hash_file  # noqa: E402
 from tool_library_loader import load_all_libraries, CAM_TOOLS_DIR  # noqa: E402
 from enrich import enrich_raw_tools  # noqa: E402
+from populate_supply_items import populate_supply_items  # noqa: E402
 from validate_library import validate_library, ValidationMode  # noqa: E402
 
 log = logging.getLogger("datum.sync")
@@ -423,6 +424,19 @@ def main(argv: list[str] | None = None) -> int:
             return 2
 
     report.print_summary()
+
+    # Post-sync: refresh plex_supply_items staging table (#80).
+    # Non-fatal — a failure here should not change the sync exit code.
+    if not args.dry_run and report.succeeded:
+        try:
+            sb = SupabaseClient()
+            pop = populate_supply_items(sb)
+            log.info(
+                "Supply-item staging: %d staged, %d skipped, %d failed",
+                len(pop.staged), len(pop.skipped), len(pop.failed),
+            )
+        except Exception as e:
+            log.warning("Supply-item staging failed (non-fatal): %s", e)
 
     if not report.results:
         log.error("No libraries processed from any source")
