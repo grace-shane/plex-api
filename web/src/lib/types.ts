@@ -57,6 +57,18 @@ export interface Tool {
   libraries?: Pick<Library, "library_name" | "vendor" | "source_modified_at"> | null;
 }
 
+export interface PlexSupplyItem {
+  fusion_guid: string;
+  category: string;
+  description: string | null;
+  item_group: string | null;
+  inventory_unit: string;
+  supply_item_number: string | null;
+  item_type: string;
+  plex_id: string | null;
+  posted_to_plex_at: string | null;
+}
+
 export interface CuttingPreset {
   id: string;
   tool_id: string;
