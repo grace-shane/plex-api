@@ -69,6 +69,21 @@ export interface PlexSupplyItem {
   posted_to_plex_at: string | null;
 }
 
+export interface ReferenceRow {
+  id: string;
+  catalog_name: string;
+  vendor: string;
+  product_id: string;
+  description: string;
+  type: string;
+  geo_dc: number | null;
+  geo_nof: number | null;
+  geo_oal: number | null;
+  geo_lcf: number | null;
+  geo_sig: number | null;
+  unit_original: string | null;
+}
+
 export interface CuttingPreset {
   id: string;
   tool_id: string;

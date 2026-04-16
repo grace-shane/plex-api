@@ -5,6 +5,7 @@ const navItems = [
   { to: "/", label: "Tools" },
   { to: "/libraries", label: "Libraries" },
   { to: "/scripts", label: "Scripts" },
+  { to: "/build-library", label: "Build Library" },
 ];
 
 export function Layout() {

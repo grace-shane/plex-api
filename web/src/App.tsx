@@ -5,6 +5,7 @@ import { ToolDetailPage } from "@/pages/ToolDetailPage";
 import { LibrariesPage } from "@/pages/LibrariesPage";
 import { RecentPage } from "@/pages/RecentPage";
 import { ScriptsPage } from "@/pages/ScriptsPage";
+import { BuildLibraryPage } from "@/pages/BuildLibraryPage";
 
 export default function App() {
   return (
@@ -16,6 +17,7 @@ export default function App() {
           <Route path="libraries" element={<LibrariesPage />} />
           <Route path="recent" element={<RecentPage />} />
           <Route path="scripts" element={<ScriptsPage />} />
+          <Route path="build-library" element={<BuildLibraryPage />} />
         </Route>
       </Routes>
     </BrowserRouter>
