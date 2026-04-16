@@ -269,16 +269,20 @@ class TestSyncFromLocal:
 # CLI (main)
 # ─────────────────────────────────────────────
 class TestMain:
+    @patch("sync.populate_supply_items")
+    @patch("sync.SupabaseClient")
     @patch("sync.sync_from_aps")
-    def test_exit_0_on_success(self, mock_aps):
+    def test_exit_0_on_success(self, mock_aps, _sb, _pop):
         report = SyncReport(source="aps", start_time=0, end_time=1)
         report.results = [LibraryResult("A", "success", tools=5, presets=10)]
         mock_aps.return_value = report
 
         assert main([]) == 0
 
+    @patch("sync.populate_supply_items")
+    @patch("sync.SupabaseClient")
     @patch("sync.sync_from_aps")
-    def test_exit_1_on_partial_failure(self, mock_aps):
+    def test_exit_1_on_partial_failure(self, mock_aps, _sb, _pop):
         report = SyncReport(source="aps", start_time=0, end_time=1)
         report.results = [
             LibraryResult("A", "success", tools=5, presets=10),
@@ -288,9 +292,11 @@ class TestMain:
 
         assert main([]) == 1
 
+    @patch("sync.populate_supply_items")
+    @patch("sync.SupabaseClient")
     @patch("sync.sync_from_local")
     @patch("sync.sync_from_aps", side_effect=APSAuthError("expired"))
-    def test_fallback_to_local_on_auth_error(self, mock_aps, mock_local):
+    def test_fallback_to_local_on_auth_error(self, mock_aps, mock_local, _sb, _pop):
         report = SyncReport(source="local", start_time=0, end_time=1)
         report.results = [LibraryResult("A", "success", tools=5, presets=10)]
         mock_local.return_value = report
@@ -298,8 +304,10 @@ class TestMain:
         assert main([]) == 0
         mock_local.assert_called_once()
 
+    @patch("sync.populate_supply_items")
+    @patch("sync.SupabaseClient")
     @patch("sync.sync_from_local")
-    def test_local_flag_skips_aps(self, mock_local):
+    def test_local_flag_skips_aps(self, mock_local, _sb, _pop):
         report = SyncReport(source="local", start_time=0, end_time=1)
         report.results = [LibraryResult("A", "success", tools=5, presets=10)]
         mock_local.return_value = report
@@ -323,3 +331,57 @@ class TestMain:
 
         assert main(["--dry-run"]) == 0
         mock_aps.assert_called_once_with(dry_run=True)
+
+
+# ─────────────────────────────────────────────
+# Post-sync supply-item staging hook (#80)
+# ─────────────────────────────────────────────
+class TestPostSyncHook:
+    @patch("sync.populate_supply_items")
+    @patch("sync.SupabaseClient")
+    @patch("sync.sync_from_aps")
+    def test_populate_called_after_successful_sync(self, mock_aps, mock_sb, mock_pop):
+        from populate_supply_items import PopulateReport, RowResult
+        report = SyncReport(source="aps", start_time=0, end_time=1)
+        report.results = [LibraryResult("A", "success", tools=5, presets=10)]
+        mock_aps.return_value = report
+        pop_rpt = PopulateReport()
+        pop_rpt.results = [RowResult("g1", "staged")]
+        pop_rpt.end_time = 1.0
+        mock_pop.return_value = pop_rpt
+
+        assert main([]) == 0
+        mock_pop.assert_called_once()
+
+    @patch("sync.populate_supply_items")
+    @patch("sync.SupabaseClient")
+    @patch("sync.sync_from_aps")
+    def test_populate_not_called_on_dry_run(self, mock_aps, mock_sb, mock_pop):
+        report = SyncReport(source="aps", start_time=0, end_time=1)
+        report.results = [LibraryResult("A", "success", tools=5)]
+        mock_aps.return_value = report
+
+        assert main(["--dry-run"]) == 0
+        mock_pop.assert_not_called()
+
+    @patch("sync.populate_supply_items")
+    @patch("sync.SupabaseClient")
+    @patch("sync.sync_from_aps")
+    def test_populate_not_called_when_no_succeeded(self, mock_aps, mock_sb, mock_pop):
+        report = SyncReport(source="aps", start_time=0, end_time=1)
+        report.results = [LibraryResult("A", "fail", message="boom")]
+        mock_aps.return_value = report
+
+        main([])
+        mock_pop.assert_not_called()
+
+    @patch("sync.populate_supply_items", side_effect=RuntimeError("staging broke"))
+    @patch("sync.SupabaseClient")
+    @patch("sync.sync_from_aps")
+    def test_populate_failure_is_nonfatal(self, mock_aps, mock_sb, mock_pop):
+        report = SyncReport(source="aps", start_time=0, end_time=1)
+        report.results = [LibraryResult("A", "success", tools=5, presets=10)]
+        mock_aps.return_value = report
+
+        # Should still return 0 despite staging failure
+        assert main([]) == 0

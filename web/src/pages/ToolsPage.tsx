@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 import { supabase } from "@/lib/supabase";
 import type { Tool } from "@/lib/types";
+import { relativeTime } from "@/lib/utils";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import {
@@ -24,6 +25,35 @@ function readImperialPref(): boolean {
   }
 }
 
+const STORAGE_KEY_INV_FILTER = "datum-inv-filter";
+
+type InvStatus = "in_stock" | "out_of_stock" | "not_tracked" | "not_linked";
+const ALL_INV_STATUSES: InvStatus[] = ["in_stock", "out_of_stock", "not_tracked", "not_linked"];
+const INV_LABELS: Record<InvStatus, string> = {
+  in_stock: "In stock",
+  out_of_stock: "Out of stock",
+  not_tracked: "Not tracked",
+  not_linked: "Not linked",
+};
+
+function readInvFilter(): Set<InvStatus> {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY_INV_FILTER);
+    if (raw) {
+      const arr = JSON.parse(raw) as string[];
+      const valid = arr.filter((s): s is InvStatus => ALL_INV_STATUSES.includes(s as InvStatus));
+      if (valid.length > 0) return new Set(valid);
+    }
+  } catch {}
+  return new Set<InvStatus>();
+}
+
+function getInvStatus(tool: Tool): InvStatus {
+  if (!tool.plex_supply_item_id) return "not_linked";
+  if (!tool.qty_tracked) return "not_tracked";
+  return (tool.qty_on_hand ?? 0) > 0 ? "in_stock" : "out_of_stock";
+}
+
 type SortField =
   | "description"
   | "product_id"
@@ -32,6 +62,7 @@ type SortField =
   | "geo_dc"
   | "geo_oal"
   | "geo_nof"
+  | "qty_on_hand"
   | "plex";
 type SortDir = "asc" | "desc";
 
@@ -47,7 +78,10 @@ function compare(a: Tool, b: Tool, field: SortField): number {
       return (a.type || "").localeCompare(b.type || "");
     case "geo_dc":
     case "geo_oal":
-    case "geo_nof": {
+    case "geo_nof":
+    case "qty_on_hand": {
+      // NULL sorts last regardless of direction (handled by using -Infinity
+      // for asc — caller flips sign for desc, so -Inf stays at the end)
       const av = a[field] ?? -Infinity;
       const bv = b[field] ?? -Infinity;
       return av - bv;
@@ -141,6 +175,83 @@ function TypeDropdown({
   );
 }
 
+/** Inventory status filter dropdown */
+function InvStatusDropdown({
+  selected,
+  onToggle,
+  onClear,
+}: {
+  selected: Set<InvStatus>;
+  onToggle: (status: InvStatus) => void;
+  onClear: () => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    function handleClick(e: MouseEvent) {
+      if (ref.current && !ref.current.contains(e.target as Node)) {
+        setOpen(false);
+      }
+    }
+    document.addEventListener("mousedown", handleClick);
+    return () => document.removeEventListener("mousedown", handleClick);
+  }, []);
+
+  const label =
+    selected.size === 0
+      ? "All inventory"
+      : selected.size === 1
+        ? INV_LABELS[[...selected][0]]
+        : `${selected.size} statuses`;
+
+  return (
+    <div ref={ref} className="relative">
+      <button
+        onClick={() => setOpen(!open)}
+        className="flex h-9 items-center gap-1 rounded-md border border-border bg-background px-3 text-sm text-foreground"
+      >
+        {label}
+        <svg
+          className={`ml-1 h-3 w-3 transition-transform ${open ? "rotate-180" : ""}`}
+          viewBox="0 0 12 12"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="2"
+        >
+          <path d="M3 4.5 L6 7.5 L9 4.5" />
+        </svg>
+      </button>
+      {open && (
+        <div className="absolute left-0 top-10 z-50 min-w-[180px] rounded-md border border-border bg-background py-1 shadow-md">
+          {selected.size > 0 && (
+            <button
+              onClick={() => { onClear(); setOpen(false); }}
+              className="w-full px-3 py-1.5 text-left text-xs text-muted-foreground hover:bg-accent"
+            >
+              Clear all
+            </button>
+          )}
+          {ALL_INV_STATUSES.map((status) => (
+            <label
+              key={status}
+              className="flex cursor-pointer items-center gap-2 px-3 py-1.5 text-sm hover:bg-accent"
+            >
+              <input
+                type="checkbox"
+                checked={selected.has(status)}
+                onChange={() => onToggle(status)}
+                className="rounded"
+              />
+              {INV_LABELS[status]}
+            </label>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 export function ToolsPage() {
   const [tools, setTools] = useState<Tool[]>([]);
   const [search, setSearch] = useState("");
@@ -151,6 +262,7 @@ export function ToolsPage() {
   const [sortField, setSortField] = useState<SortField>("description");
   const [sortDir, setSortDir] = useState<SortDir>("asc");
   const [recentCount, setRecentCount] = useState<number | null>(null);
+  const [invFilters, setInvFilters] = useState<Set<InvStatus>>(readInvFilter);
 
   useEffect(() => {
     async function fetchTools() {
@@ -190,6 +302,7 @@ export function ToolsPage() {
 
   const filtered = tools.filter((t) => {
     if (typeFilters.size > 0 && !typeFilters.has(t.type)) return false;
+    if (invFilters.size > 0 && !invFilters.has(getInvStatus(t))) return false;
     if (libraryParam && t.libraries?.library_name !== libraryParam) return false;
     if (!search) return true;
     const q = search.toLowerCase();
@@ -219,6 +332,16 @@ export function ToolsPage() {
       const next = new Set(prev);
       if (next.has(type)) next.delete(type);
       else next.add(type);
+      return next;
+    });
+  }
+
+  function toggleInvFilter(status: InvStatus) {
+    setInvFilters((prev) => {
+      const next = new Set(prev);
+      if (next.has(status)) next.delete(status);
+      else next.add(status);
+      try { localStorage.setItem(STORAGE_KEY_INV_FILTER, JSON.stringify([...next])); } catch {}
       return next;
     });
   }
@@ -301,6 +424,11 @@ export function ToolsPage() {
           onToggle={toggleTypeFilter}
           onClear={() => setTypeFilters(new Set())}
         />
+        <InvStatusDropdown
+          selected={invFilters}
+          onToggle={toggleInvFilter}
+          onClear={() => { setInvFilters(new Set()); try { localStorage.removeItem(STORAGE_KEY_INV_FILTER); } catch {} }}
+        />
         {typeFilters.size > 0 && (
           <div className="flex flex-wrap items-center gap-1.5">
             {[...typeFilters].map((t) => (
@@ -336,13 +464,14 @@ export function ToolsPage() {
               <SortHeader field="geo_dc" className="text-right whitespace-nowrap">Dia ({dimUnit})</SortHeader>
               <SortHeader field="geo_oal" className="text-right whitespace-nowrap">OAL ({dimUnit})</SortHeader>
               <SortHeader field="geo_nof" className="text-right">Flutes</SortHeader>
+              <SortHeader field="qty_on_hand" className="text-right whitespace-nowrap">On hand</SortHeader>
               <SortHeader field="plex">Plex</SortHeader>
             </TableRow>
           </TableHeader>
           <TableBody>
             {sorted.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={8} className="h-24 text-center text-muted-foreground">
+                <TableCell colSpan={9} className="h-24 text-center text-muted-foreground">
                   {tools.length === 0 ? "No tools in database. Run a sync to populate." : "No tools match your search."}
                 </TableCell>
               </TableRow>
@@ -373,6 +502,20 @@ export function ToolsPage() {
                   </TableCell>
                   <TableCell className="text-right font-mono text-sm">
                     {tool.geo_nof ?? "\u2014"}
+                  </TableCell>
+                  <TableCell className="text-right text-sm whitespace-nowrap">
+                    {!tool.plex_supply_item_id ? (
+                      <span className="text-muted-foreground" title="No Plex link yet — will populate once writeback sync runs">&mdash;</span>
+                    ) : !tool.qty_tracked ? (
+                      <span className="text-muted-foreground" title="Linked to Plex but no adjustment history">Not tracked</span>
+                    ) : (
+                      <span
+                        className="font-mono"
+                        title={`Synced ${relativeTime(tool.qty_synced_at)}`}
+                      >
+                        {tool.qty_on_hand ?? 0} pcs
+                      </span>
+                    )}
                   </TableCell>
                   <TableCell>
                     {tool.plex_supply_item_id ? (

@@ -1,7 +1,8 @@
 import { useEffect, useState } from "react";
 import { useParams, Link } from "react-router-dom";
 import { supabase } from "@/lib/supabase";
-import type { Tool, CuttingPreset } from "@/lib/types";
+import type { Tool, CuttingPreset, PlexSupplyItem } from "@/lib/types";
+import { relativeTime } from "@/lib/utils";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
@@ -83,6 +84,7 @@ export function ToolDetailPage() {
   const { id } = useParams<{ id: string }>();
   const [tool, setTool] = useState<Tool | null>(null);
   const [presets, setPresets] = useState<CuttingPreset[]>([]);
+  const [staging, setStaging] = useState<PlexSupplyItem | null>(null);
   const [loading, setLoading] = useState(true);
   const [imperial, setImperial] = useState(readImperialPref);
 
@@ -101,7 +103,16 @@ export function ToolDetailPage() {
           .order("name"),
       ]);
 
-      if (toolRes.data) setTool(toolRes.data);
+      if (toolRes.data) {
+        setTool(toolRes.data);
+        // Fetch staging row (separate query — plex_supply_items keys on fusion_guid, not id)
+        const { data: stagingData } = await supabase
+          .from("plex_supply_items")
+          .select("*")
+          .eq("fusion_guid", toolRes.data.fusion_guid)
+          .maybeSingle();
+        if (stagingData) setStaging(stagingData);
+      }
       if (presetsRes.data) setPresets(presetsRes.data);
       setLoading(false);
     }
@@ -152,6 +163,87 @@ export function ToolDetailPage() {
           )}
         </div>
       </div>
+
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base">On hand</CardTitle>
+        </CardHeader>
+        <CardContent>
+          {!tool.plex_supply_item_id ? (
+            <p className="text-sm text-muted-foreground">
+              Not linked to Plex — will populate once writeback sync runs.
+            </p>
+          ) : !tool.qty_tracked ? (
+            <p className="text-sm text-muted-foreground">
+              Linked to Plex but no adjustment history.
+            </p>
+          ) : (
+            <div className="flex items-baseline gap-2">
+              <span className="text-3xl font-semibold font-mono">
+                {tool.qty_on_hand ?? 0}
+              </span>
+              <span className="text-muted-foreground">pcs</span>
+              {tool.qty_synced_at && (
+                <span className="ml-auto text-xs text-muted-foreground">
+                  Synced {relativeTime(tool.qty_synced_at)}
+                </span>
+              )}
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
+      {staging && (
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-base flex items-center gap-2">
+              Plex Staging Payload
+              {staging.plex_id ? (
+                <Badge variant="default">
+                  Posted {staging.posted_to_plex_at ? new Date(staging.posted_to_plex_at).toLocaleDateString() : ""}
+                </Badge>
+              ) : (
+                <Badge variant="outline">Not posted</Badge>
+              )}
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-2 text-sm">
+            <div className="flex justify-between">
+              <span className="text-muted-foreground">Category</span>
+              <span>{staging.category}</span>
+            </div>
+            <div className="flex justify-between">
+              <span className="text-muted-foreground">Group</span>
+              <span>{staging.item_group ?? "\u2014"}</span>
+            </div>
+            <div className="flex justify-between">
+              <span className="text-muted-foreground">Description</span>
+              <span className="max-w-64 truncate">{staging.description ?? "\u2014"}</span>
+            </div>
+            <div className="flex justify-between">
+              <span className="text-muted-foreground">Supply Item #</span>
+              <span className="font-mono">{staging.supply_item_number ?? "\u2014"}</span>
+            </div>
+            <div className="flex justify-between">
+              <span className="text-muted-foreground">Inventory Unit</span>
+              <span>{staging.inventory_unit}</span>
+            </div>
+            <div className="flex justify-between">
+              <span className="text-muted-foreground">Type</span>
+              <span>{staging.item_type}</span>
+            </div>
+            {staging.plex_id && (
+              <>
+                <Separator />
+                <div className="flex justify-between">
+                  <span className="text-muted-foreground">Plex UUID</span>
+                  <span className="max-w-48 truncate font-mono text-xs">{staging.plex_id}</span>
+                </div>
+              </>
+            )}
+          </CardContent>
+        </Card>
+      )}
 
       <div className="grid gap-6 md:grid-cols-2">
         <Card>

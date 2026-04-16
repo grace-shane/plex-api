@@ -44,12 +44,44 @@ export interface Tool {
   plex_supply_item_id: string | null;
   plex_synced_at: string | null;
 
+  // Inventory qty (populated by datum-sync-inventory)
+  qty_on_hand: number | null;
+  qty_tracked: boolean | null;
+  qty_synced_at: string | null;
+
   // Timestamps
   created_at: string;
   updated_at: string;
 
   // Joined
   libraries?: Pick<Library, "library_name" | "vendor" | "source_modified_at"> | null;
+}
+
+export interface PlexSupplyItem {
+  fusion_guid: string;
+  category: string;
+  description: string | null;
+  item_group: string | null;
+  inventory_unit: string;
+  supply_item_number: string | null;
+  item_type: string;
+  plex_id: string | null;
+  posted_to_plex_at: string | null;
+}
+
+export interface ReferenceRow {
+  id: string;
+  catalog_name: string;
+  vendor: string;
+  product_id: string;
+  description: string;
+  type: string;
+  geo_dc: number | null;
+  geo_nof: number | null;
+  geo_oal: number | null;
+  geo_lcf: number | null;
+  geo_sig: number | null;
+  unit_original: string | null;
 }
 
 export interface CuttingPreset {
