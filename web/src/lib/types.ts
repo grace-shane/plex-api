@@ -44,6 +44,11 @@ export interface Tool {
   plex_supply_item_id: string | null;
   plex_synced_at: string | null;
 
+  // Inventory qty (populated by datum-sync-inventory)
+  qty_on_hand: number | null;
+  qty_tracked: boolean | null;
+  qty_synced_at: string | null;
+
   // Timestamps
   created_at: string;
   updated_at: string;

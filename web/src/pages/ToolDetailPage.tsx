@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { useParams, Link } from "react-router-dom";
 import { supabase } from "@/lib/supabase";
 import type { Tool, CuttingPreset } from "@/lib/types";
+import { relativeTime } from "@/lib/utils";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
@@ -152,6 +153,35 @@ export function ToolDetailPage() {
           )}
         </div>
       </div>
+
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base">On hand</CardTitle>
+        </CardHeader>
+        <CardContent>
+          {!tool.plex_supply_item_id ? (
+            <p className="text-sm text-muted-foreground">
+              Not linked to Plex — will populate once writeback sync runs.
+            </p>
+          ) : !tool.qty_tracked ? (
+            <p className="text-sm text-muted-foreground">
+              Linked to Plex but no adjustment history.
+            </p>
+          ) : (
+            <div className="flex items-baseline gap-2">
+              <span className="text-3xl font-semibold font-mono">
+                {tool.qty_on_hand ?? 0}
+              </span>
+              <span className="text-muted-foreground">pcs</span>
+              {tool.qty_synced_at && (
+                <span className="ml-auto text-xs text-muted-foreground">
+                  Synced {relativeTime(tool.qty_synced_at)}
+                </span>
+              )}
+            </div>
+          )}
+        </CardContent>
+      </Card>
 
       <div className="grid gap-6 md:grid-cols-2">
         <Card>
