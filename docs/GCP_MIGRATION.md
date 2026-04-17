@@ -56,7 +56,7 @@ Three forcing functions collided in April 2026:
   Cloudflare (datum.graceops.dev) ──▶ Flask on runtime VM ──▶ React UI
 
   ┌─────────────────┐
-  │  datum-dev      │  Cloud Scheduler: start 7am CT / stop 5pm CT (Mon–Fri)
+  │  datum-dev      │  Cloud Scheduler: start 07:00 CT / stop 19:00 CT (Mon–Fri)
   │  e2-standard-2  │
   │  Ubuntu 22.04   │  SSH target for VS Code Remote / Claude Code
   └─────────────────┘
@@ -68,7 +68,7 @@ Three forcing functions collided in April 2026:
 
 | VM | Purpose | Machine type | OS | Runtime model |
 |---|---|---|---|---|
-| `datum-dev` | Cloud dev environment — replaces the locked-down work machine. SSH target for VS Code Remote / Claude Code. | `e2-standard-2` | Ubuntu 22.04 | Business hours only. Cloud Scheduler start 7am CT / stop 5pm CT, Mon–Fri. Off weekends and evenings. |
+| `datum-dev` | Cloud dev environment — replaces the locked-down work machine. SSH target for VS Code Remote / Claude Code. | `e2-standard-2` | Ubuntu 22.04 | Business hours only. Cloud Scheduler start 07:00 CT / stop 19:00 CT, Mon–Fri. Off weekends and evenings. See [Cost — `datum-dev` weekday-only schedule](#cost--datum-dev-weekday-only-schedule) for the math. |
 | `datum-runtime` | Nightly sync cron + Flask API surface for the React UI | `e2-micro` | Ubuntu 22.04 | Always-on in `us-central1` (free tier) |
 
 ### Why split them
@@ -236,3 +236,37 @@ implementation PRs will work through.**
 - **APS token vs Consumer Key lifetime.** Plex Consumer Key rotates every 31
   days; APS tokens rotate on their own cycle. Two independent rotation alarms;
   document both in the runbook.
+
+---
+
+## Cost — `datum-dev` weekday-only schedule
+
+`scripts/gcp/08-scheduler.sh` creates two Cloud Scheduler jobs that
+start `datum-dev` weekdays at 07:00 America/Chicago and stop it at
+19:00 America/Chicago. That's 12h × 5 days × ~4.33 weeks ≈ 260h/mo
+versus 730h/mo for always-on — a ~64% compute reduction.
+
+| Mode | Hours/mo | `e2-standard-2` cost (us-central1, list) |
+|---|---:|---:|
+| Always-on (24/7) | 730 | ~$50/mo |
+| Weekday 07:00–19:00 CT | ~260 | ~$15/mo |
+
+Persistent disk bills separately and isn't affected by stop/start —
+the $35/mo delta is compute-only. On stop, the boot disk and hostname
+are preserved; on start, the same VM comes back up.
+
+**IAM scope.** The script grants the runtime service account
+`roles/compute.instanceAdmin.v1` on the `datum-dev` instance only
+(not project-level), so the Scheduler auth identity can still only
+touch that one VM.
+
+**Gotchas.**
+
+- An SSH session into `datum-dev` at 19:00 CT gets killed when the
+  stop job fires. For late work, trigger the start job manually:
+  `gcloud scheduler jobs run datum-dev-start --location=$REGION --project=$PROJECT_ID`.
+- The schedule is weekday-only (`0 7 * * 1-5` / `0 19 * * 1-5`). Weekend
+  work needs a manual `gcloud compute instances start datum-dev ...`.
+- Cloud Scheduler jobs live in `$REGION` (currently `us-central1`).
+  If you ever change `REGION` in `env.sh` the existing jobs won't follow —
+  delete them from the old region and re-run `08-scheduler.sh`.
