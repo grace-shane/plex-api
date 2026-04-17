@@ -1,0 +1,27 @@
+[Unit]
+Description=Datum Plex-Mimic Mock HTTP Server
+After=network.target
+Documentation=https://github.com/grace-shane/Datum/issues/92
+
+[Service]
+Type=simple
+User=datum
+Group=datum
+WorkingDirectory=/opt/datum
+EnvironmentFile=/opt/datum/.env.local
+ExecStart=/opt/datum/.venv/bin/datum-plex-mock-serve \
+  --host 127.0.0.1 \
+  --port 8080 \
+  --snapshots /opt/datum/tools/plex_mock/snapshots \
+  --db /var/lib/datum/plex-mock-captures.db
+Restart=on-failure
+RestartSec=5
+# Hardening — mock has no reason to touch anything outside its data dir
+ReadWritePaths=/var/lib/datum
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+NoNewPrivileges=true
+
+[Install]
+WantedBy=multi-user.target
