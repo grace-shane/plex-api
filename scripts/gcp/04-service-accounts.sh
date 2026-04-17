@@ -27,6 +27,13 @@ ensure \
      --display-name='Datum dev VM'" \
   "service account $DEV_SA"
 
+# Wait for IAM propagation before binding roles. SA creation returns
+# immediately but the SA isn't always visible to add-iam-policy-binding
+# for ~30s. A missing SA surfaces as a confusing "Policy modification
+# failed" error with a misleading lint-condition hint.
+say "waiting for SA propagation (30s)"
+sleep 30
+
 # ── Project-level role bindings ────────────────────────────────────────────
 # add-iam-policy-binding is effectively idempotent (no-op if the binding
 # already exists).
@@ -46,8 +53,3 @@ for ROLE in roles/cloudsql.client roles/logging.logWriter; do
 done
 
 ok "IAM bindings applied"
-
-# Give IAM a moment to propagate before 05-secrets.sh binds per-secret roles.
-# Without this, per-secret bindings occasionally fail with
-# "service account not found" on fresh SAs.
-sleep 10
