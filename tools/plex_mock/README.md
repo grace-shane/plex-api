@@ -45,10 +45,10 @@ Every write lands in `captures.db` keyed by `run_id` for later diffing.
 
 Before we flip `PLEX_ALLOW_WRITES=1` against real `connect.plex.com`:
 
-1. Three consecutive `datum-sync` runs against the mock produce identical capture sets (same count, same payload shapes).
+1. Three consecutive `datum-sync` runs against the mock produce matching row counts (read them off the diff CLI output) and all CLEAN diffs.
 2. `datum-plex-mock-diff` reports CLEAN against `expected_supply_items.json` for all three runs.
-3. Rehearsal notes in `tools/plex_mock/REHEARSAL_NOTES.md` document at least one full mock-sync cycle end-to-end.
-4. Only then: PR that enables writes to real Plex, and only with explicit Shane approval in the PR description.
+3. The PR that enables real-Plex writes pastes the three diff outputs into its description and calls out any anomaly observed during the runs. The PR description is the rehearsal log — no separate notes file.
+4. Only then: the PR that enables writes to real Plex merges, and only with explicit Shane approval.
 
 The mock is the validation surface. `test.connect.plex.com` (`PLEX_USE_TEST=1`) is not — the Datum Consumer Key only authenticates against production (see `docs/BRIEFING.md`).
 

@@ -92,6 +92,81 @@ class TestMalformedSnapshot:
             create_app(snapshots_dir=d, db_path=tmp_path / "c.db", run_id="r1")
         assert "supply_items_list.json" in str(excinfo.value)
 
+    def test_missing_snapshot_raises_file_not_found_with_actionable_message(self, tmp_path: Path):
+        d = tmp_path / "snapshots"
+        d.mkdir()
+        # Only workcenters present; supply_items_list.json is missing.
+        (d / "workcenters_list.json").write_text("[]")
+        with pytest.raises(FileNotFoundError) as excinfo:
+            create_app(snapshots_dir=d, db_path=tmp_path / "c.db", run_id="r1")
+        msg = str(excinfo.value)
+        assert "supply_items_list.json" in msg
+        assert "capture_snapshots" in msg
+
+
+class TestMalformedWriteBodies:
+    """Malformed / non-object bodies must return 400 instead of being captured as {}."""
+
+    def test_post_rejects_non_json_body(self, client):
+        rv = client.post(
+            "/inventory/v1/inventory-definitions/supply-items",
+            data="not json at all",
+            content_type="application/json",
+        )
+        assert rv.status_code == 400
+        assert rv.get_json()["error"] == "invalid JSON body"
+
+    def test_post_rejects_array_body(self, client):
+        rv = client.post("/inventory/v1/inventory-definitions/supply-items", json=[1, 2, 3])
+        assert rv.status_code == 400
+        assert "JSON object" in rv.get_json()["error"]
+
+    def test_post_rejects_scalar_body(self, client):
+        rv = client.post("/inventory/v1/inventory-definitions/supply-items", json="hello")
+        assert rv.status_code == 400
+
+    def test_rejected_post_does_not_capture(self, client):
+        client.post(
+            "/inventory/v1/inventory-definitions/supply-items",
+            data="not json",
+            content_type="application/json",
+        )
+        store = client.application.config["PLEX_MOCK_STORE"]
+        rows = store.query(run_id=client.application.config["PLEX_MOCK_RUN_ID"])
+        assert rows == []
+
+    def test_put_rejects_malformed_json(self, client):
+        rv = client.put(
+            "/inventory/v1/inventory-definitions/supply-items/11111111-1111-1111-1111-111111111111",
+            data="{not json",
+            content_type="application/json",
+        )
+        assert rv.status_code == 400
+
+    def test_put_404_takes_precedence_over_body_parse(self, client):
+        # Unknown id + malformed body: 404 wins (matches original ordering).
+        rv = client.put(
+            "/inventory/v1/inventory-definitions/supply-items/not-a-real-id",
+            data="not json",
+            content_type="application/json",
+        )
+        assert rv.status_code == 404
+
+    def test_workcenter_put_rejects_array_body(self, client):
+        rv = client.put(
+            "/production/v1/production-definitions/workcenters/0b6cf62b-2809-4d3d-ab24-369cd0171f62",
+            json=[1, 2],
+        )
+        assert rv.status_code == 400
+
+    def test_workcenter_patch_rejects_malformed_json(self, client):
+        rv = client.patch(
+            "/production/v1/production-definitions/workcenters/0b6cf62b-2809-4d3d-ab24-369cd0171f62",
+            data="bogus",
+            content_type="application/json",
+        )
+        assert rv.status_code == 400
+
 
 import uuid
 

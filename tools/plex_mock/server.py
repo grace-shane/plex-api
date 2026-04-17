@@ -1,7 +1,7 @@
 """
 Flask app mimicking the Plex REST endpoints the sync writes to.
-GETs serve canned snapshots from disk; POST/PUT/PATCH handlers land
-in Task 6 (this file grows, the tests drive the shape).
+GETs serve canned snapshots from disk; POST/PUT/PATCH capture request
+bodies to the SQLite store and return Plex-shape responses.
 
 Bound to 127.0.0.1 by the systemd unit — never expose publicly.
 Issue: #92.
@@ -9,9 +9,11 @@ Issue: #92.
 from __future__ import annotations
 
 import json
+import uuid
 from pathlib import Path
 
-from flask import Flask, abort, jsonify
+from flask import Flask, abort, jsonify, request
+from werkzeug.exceptions import BadRequest
 
 from tools.plex_mock.store import CaptureStore
 
@@ -19,11 +21,38 @@ from tools.plex_mock.store import CaptureStore
 def _load_snapshot(snapshots_dir: Path, name: str) -> list[dict]:
     path = snapshots_dir / name
     if not path.exists():
-        return []
+        raise FileNotFoundError(
+            f"Snapshot {name} not found in {snapshots_dir}. "
+            f"Run `python -m tools.plex_mock.capture_snapshots` on a "
+            f"credentialed host to generate it."
+        )
     try:
         return json.loads(path.read_text(encoding="utf-8"))
     except json.JSONDecodeError as exc:
         raise ValueError(f"Malformed JSON in snapshot {path}: {exc}") from exc
+
+
+def _parse_json_object(req):
+    """Strictly parse a request body as a JSON object.
+
+    Returns either the parsed dict, or a Flask response tuple (jsonify, 400)
+    describing why the body was rejected. Malformed JSON and non-object
+    bodies are refused so a broken sync surfaces as a 400 instead of
+    getting silently captured as an empty dict (#96 review follow-up).
+    """
+    try:
+        payload = req.get_json(silent=False)
+    except BadRequest as exc:
+        return jsonify({
+            "error": "invalid JSON body",
+            "detail": exc.description,
+        }), 400
+    if not isinstance(payload, dict):
+        return jsonify({
+            "error": "request body must be a JSON object",
+            "detail": f"got {type(payload).__name__}",
+        }), 400
+    return payload
 
 
 def create_app(
@@ -76,8 +105,10 @@ def create_app(
 
     @app.post("/inventory/v1/inventory-definitions/supply-items")
     def supply_items_post():
-        from flask import request
-        payload = request.get_json(silent=True) or {}
+        parsed = _parse_json_object(request)
+        if not isinstance(parsed, dict):
+            return parsed  # 400 response tuple
+        payload = parsed
         # Dedup by supplyItemNumber against the snapshot — Plex returns 409.
         # Guard before capturing so failed requests aren't stored; matches
         # the 404 ordering in supply_items_put and workcenter_write.
@@ -91,17 +122,18 @@ def create_app(
             body=payload,
             run_id=app.config["PLEX_MOCK_RUN_ID"],
         )
-        import uuid as _uuid
         resp = dict(payload)
-        resp["id"] = str(_uuid.uuid4())
+        resp["id"] = str(uuid.uuid4())
         return jsonify(resp), 201
 
     @app.put("/inventory/v1/inventory-definitions/supply-items/<item_id>")
     def supply_items_put(item_id: str):
-        from flask import request
         if item_id not in supply_by_id:
             abort(404)
-        payload = request.get_json(silent=True) or {}
+        parsed = _parse_json_object(request)
+        if not isinstance(parsed, dict):
+            return parsed
+        payload = parsed
         store: CaptureStore = app.config["PLEX_MOCK_STORE"]
         store.append(
             method="PUT",
@@ -117,10 +149,12 @@ def create_app(
         methods=["PUT", "PATCH"],
     )
     def workcenter_write(wc_id: str):
-        from flask import request
         if wc_id not in workcenter_by_id:
             abort(404)
-        payload = request.get_json(silent=True) or {}
+        parsed = _parse_json_object(request)
+        if not isinstance(parsed, dict):
+            return parsed
+        payload = parsed
         store: CaptureStore = app.config["PLEX_MOCK_STORE"]
         store.append(
             method=request.method,
@@ -137,7 +171,6 @@ def create_app(
 def main() -> int:
     """Console-script entry (datum-plex-mock-serve)."""
     import argparse
-    import uuid
 
     ap = argparse.ArgumentParser(description="Plex-mimic mock server")
     ap.add_argument("--host", default="127.0.0.1")
