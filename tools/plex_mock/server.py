@@ -74,6 +74,61 @@ def create_app(
             abort(404)
         return jsonify(rec)
 
+    @app.post("/inventory/v1/inventory-definitions/supply-items")
+    def supply_items_post():
+        from flask import request
+        payload = request.get_json(silent=True) or {}
+        store: CaptureStore = app.config["PLEX_MOCK_STORE"]
+        store.append(
+            method="POST",
+            path=request.path,
+            body=payload,
+            run_id=app.config["PLEX_MOCK_RUN_ID"],
+        )
+        # Dedup by supplyItemNumber against the snapshot — Plex returns 409
+        sin = payload.get("supplyItemNumber")
+        if sin and any(rec.get("supplyItemNumber") == sin for rec in supply_items):
+            return jsonify({"error": "duplicate supplyItemNumber", "supplyItemNumber": sin}), 409
+        import uuid as _uuid
+        resp = dict(payload)
+        resp["id"] = str(_uuid.uuid4())
+        return jsonify(resp), 201
+
+    @app.put("/inventory/v1/inventory-definitions/supply-items/<item_id>")
+    def supply_items_put(item_id: str):
+        from flask import request
+        if item_id not in supply_by_id:
+            abort(404)
+        payload = request.get_json(silent=True) or {}
+        store: CaptureStore = app.config["PLEX_MOCK_STORE"]
+        store.append(
+            method="PUT",
+            path=request.path,
+            body=payload,
+            run_id=app.config["PLEX_MOCK_RUN_ID"],
+        )
+        merged = {**supply_by_id[item_id], **payload, "id": item_id}
+        return jsonify(merged), 200
+
+    @app.route(
+        "/production/v1/production-definitions/workcenters/<wc_id>",
+        methods=["PUT", "PATCH"],
+    )
+    def workcenter_write(wc_id: str):
+        from flask import request
+        if wc_id not in workcenter_by_id:
+            abort(404)
+        payload = request.get_json(silent=True) or {}
+        store: CaptureStore = app.config["PLEX_MOCK_STORE"]
+        store.append(
+            method=request.method,
+            path=request.path,
+            body=payload,
+            run_id=app.config["PLEX_MOCK_RUN_ID"],
+        )
+        merged = {**workcenter_by_id[wc_id], **payload, "workcenterId": wc_id}
+        return jsonify(merged), 200
+
     return app
 
 
