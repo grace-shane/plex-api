@@ -8,7 +8,9 @@ Type=simple
 User=datum
 Group=datum
 WorkingDirectory=/opt/datum
-EnvironmentFile=/opt/datum/.env.local
+# The mock has no Plex env var dependencies (it serves local snapshots,
+# writes to its own SQLite). Pulling in .env.local would leak real Plex
+# credentials into a process that doesn't need them. Leave unset.
 ExecStart=/opt/datum/.venv/bin/datum-plex-mock-serve \
   --host 127.0.0.1 \
   --port 8080 \
