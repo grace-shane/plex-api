@@ -57,6 +57,7 @@ class CaptureStore:
                 "VALUES (?, ?, ?, ?, ?)",
                 (ts, method, path, body_json, run_id),
             )
+            assert cur.lastrowid is not None  # INSERT always yields a rowid
             return cur.lastrowid
 
     def query(
