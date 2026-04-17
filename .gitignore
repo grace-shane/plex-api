@@ -40,3 +40,8 @@ scratch/
 
 # Claude Code per-machine permissions cache (regenerated on demand)
 .claude/settings.local.json
+
+# Plex mock — ephemeral capture data (POSTs the sync sent against the mock)
+tools/plex_mock/captures/
+tools/plex_mock/*.db
+tools/plex_mock/*.db-journal
