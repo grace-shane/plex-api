@@ -363,6 +363,54 @@ class TestIsWriteBlocked:
 
 
 # ─────────────────────────────────────────────
+# Helper function _is_production_base
+# ─────────────────────────────────────────────
+class TestIsProductionBase:
+    """Guard resolves IS_PRODUCTION via exact match, not substring.
+
+    Historical heuristic ``"test." not in client.base`` was bypassable once
+    PLEX_BASE_URL (PR #96) let operators set client.base to any string —
+    a URL containing "test." silently disarmed the guard. The fix requires
+    an exact match against PLEX_PROD_URL, so unrecognised URLs fail closed.
+    """
+
+    def test_production_url_matches(self):
+        assert app_module._is_production_base("https://connect.plex.com") is True
+
+    def test_production_url_trailing_slash_matches(self):
+        assert app_module._is_production_base("https://connect.plex.com/") is True
+
+    def test_production_url_uppercase_matches(self):
+        assert app_module._is_production_base("https://CONNECT.PLEX.COM") is True
+
+    def test_test_environment_is_not_production(self):
+        assert app_module._is_production_base("https://test.connect.plex.com") is False
+
+    def test_mock_url_is_not_production(self):
+        assert app_module._is_production_base("http://127.0.0.1:8080") is False
+
+    def test_url_containing_test_substring_not_production(self):
+        # Previously `"test." not in base` would return False here too, but
+        # it would ALSO treat any custom proxy or mock containing "test."
+        # in the hostname as non-production. That part was fine. The
+        # dangerous case is the inverse (below).
+        assert app_module._is_production_base("http://my-test-host:8080") is False
+
+    def test_adversarial_base_not_matching_prod_fails_closed(self):
+        # An operator-controlled URL that neither is prod nor contains
+        # "test." must still be treated as non-production (writes allowed
+        # only when PLEX_ALLOW_WRITES=1 elsewhere in the stack). The guard
+        # no longer lies about this class of URL.
+        for base in [
+            "https://evil.example.com",
+            "https://connect.plex.com.attacker.example",  # suffix trick
+            "https://connect-plex-com",
+            "",
+        ]:
+            assert app_module._is_production_base(base) is False
+
+
+# ─────────────────────────────────────────────
 # /api/plex/supply_items (issue #2)
 # ─────────────────────────────────────────────
 class TestSupplyItemsExtractor:

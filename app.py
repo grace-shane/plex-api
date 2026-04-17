@@ -22,6 +22,7 @@ from plex_api import (
     API_SECRET,
     TENANT_ID,
     USE_TEST,
+    BASE_URL as PLEX_PROD_URL,
     discover_all,
     extract_parts,
     extract_purchase_orders,
@@ -73,7 +74,24 @@ client = PlexClient(
 WRITES_ALLOWED = os.environ.get("PLEX_ALLOW_WRITES", "").strip().lower() in (
     "1", "true", "yes", "on", "enabled",
 )
-IS_PRODUCTION = "test." not in client.base
+
+
+def _is_production_base(base: str) -> bool:
+    """True iff ``base`` is the real Plex production endpoint.
+
+    Exact match (case-insensitive, trailing slash insensitive) against
+    PLEX_PROD_URL. Anything else — test.connect.plex.com, the local
+    Plex-mimic mock at PLEX_BASE_URL, an unrecognised proxy — is treated
+    as non-production so `_is_write_blocked` returns False.
+
+    The earlier ``"test." not in client.base`` heuristic was operator-
+    controllable: a PLEX_BASE_URL containing "test." silently disarmed
+    the guard (#96 review follow-up). This strict match fails closed.
+    """
+    return base.rstrip("/").lower() == PLEX_PROD_URL.rstrip("/").lower()
+
+
+IS_PRODUCTION = _is_production_base(client.base)
 WRITE_METHODS = {"POST", "PUT", "PATCH", "DELETE"}
 
 
