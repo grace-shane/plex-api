@@ -80,3 +80,14 @@ class TestHealth:
         rv = client.get("/healthz")
         assert rv.status_code == 200
         assert rv.get_json() == {"ok": True}
+
+
+class TestMalformedSnapshot:
+    def test_malformed_json_raises_value_error_with_path(self, tmp_path: Path):
+        d = tmp_path / "snapshots"
+        d.mkdir()
+        (d / "supply_items_list.json").write_text("not json at all")
+        (d / "workcenters_list.json").write_text("[]")
+        with pytest.raises(ValueError) as excinfo:
+            create_app(snapshots_dir=d, db_path=tmp_path / "c.db", run_id="r1")
+        assert "supply_items_list.json" in str(excinfo.value)

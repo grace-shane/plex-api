@@ -20,7 +20,10 @@ def _load_snapshot(snapshots_dir: Path, name: str) -> list[dict]:
     path = snapshots_dir / name
     if not path.exists():
         return []
-    return json.loads(path.read_text(encoding="utf-8"))
+    try:
+        return json.loads(path.read_text(encoding="utf-8"))
+    except json.JSONDecodeError as exc:
+        raise ValueError(f"Malformed JSON in snapshot {path}: {exc}") from exc
 
 
 def create_app(
@@ -34,6 +37,12 @@ def create_app(
     app.config["PLEX_MOCK_STORE"] = CaptureStore(db_path)
     app.config["PLEX_MOCK_RUN_ID"] = run_id
 
+    # The mock is stateless: these dicts are loaded once at app creation
+    # and never mutated. Task 6 POST/PUT/PATCH handlers capture request
+    # bodies to the SQLite store and return Plex-shape responses with
+    # synthetic UUIDs, but they do NOT add/modify entries here. A GET of
+    # a synthetic id from an earlier POST therefore intentionally 404s —
+    # the mock doesn't simulate Plex's inventory state, just its wire shape.
     supply_items = _load_snapshot(snapshots_dir, "supply_items_list.json")
     workcenters = _load_snapshot(snapshots_dir, "workcenters_list.json")
     supply_by_id = {rec["id"]: rec for rec in supply_items}
@@ -87,7 +96,9 @@ def main() -> int:
         run_id=args.run_id or str(uuid.uuid4()),
     )
     print(f"plex-mock serving on http://{args.host}:{args.port} run_id={app.config['PLEX_MOCK_RUN_ID']}")
-    app.run(host=args.host, port=args.port, debug=False)
+    # threaded=True so the sync can issue concurrent POSTs against the mock
+    # without Werkzeug's default single-threaded server serialising them.
+    app.run(host=args.host, port=args.port, debug=False, threaded=True)
     return 0
 
 
