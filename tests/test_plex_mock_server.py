@@ -134,6 +134,14 @@ class TestSupplyItemsPost:
         rv = client.post("/inventory/v1/inventory-definitions/supply-items", json=payload)
         assert rv.status_code == 409
 
+    def test_post_409_does_not_capture(self, client):
+        payload = {"supplyItemNumber": "ABC-1", "description": "dup"}
+        rv = client.post("/inventory/v1/inventory-definitions/supply-items", json=payload)
+        assert rv.status_code == 409
+        store = client.application.config["PLEX_MOCK_STORE"]
+        rows = store.query(run_id=client.application.config["PLEX_MOCK_RUN_ID"])
+        assert len(rows) == 0
+
 
 class TestSupplyItemsPut:
     def test_put_200_and_captured(self, client):

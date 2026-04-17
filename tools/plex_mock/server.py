@@ -78,6 +78,12 @@ def create_app(
     def supply_items_post():
         from flask import request
         payload = request.get_json(silent=True) or {}
+        # Dedup by supplyItemNumber against the snapshot — Plex returns 409.
+        # Guard before capturing so failed requests aren't stored; matches
+        # the 404 ordering in supply_items_put and workcenter_write.
+        sin = payload.get("supplyItemNumber")
+        if sin and any(rec.get("supplyItemNumber") == sin for rec in supply_items):
+            return jsonify({"error": "duplicate supplyItemNumber", "supplyItemNumber": sin}), 409
         store: CaptureStore = app.config["PLEX_MOCK_STORE"]
         store.append(
             method="POST",
@@ -85,10 +91,6 @@ def create_app(
             body=payload,
             run_id=app.config["PLEX_MOCK_RUN_ID"],
         )
-        # Dedup by supplyItemNumber against the snapshot — Plex returns 409
-        sin = payload.get("supplyItemNumber")
-        if sin and any(rec.get("supplyItemNumber") == sin for rec in supply_items):
-            return jsonify({"error": "duplicate supplyItemNumber", "supplyItemNumber": sin}), 409
         import uuid as _uuid
         resp = dict(payload)
         resp["id"] = str(_uuid.uuid4())
