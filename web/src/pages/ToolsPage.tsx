@@ -62,6 +62,7 @@ type SortField =
   | "geo_dc"
   | "geo_oal"
   | "geo_nof"
+  | "geo_re"
   | "qty_on_hand"
   | "plex";
 type SortDir = "asc" | "desc";
@@ -79,6 +80,7 @@ function compare(a: Tool, b: Tool, field: SortField): number {
     case "geo_dc":
     case "geo_oal":
     case "geo_nof":
+    case "geo_re":
     case "qty_on_hand": {
       // NULL sorts last regardless of direction (handled by using -Infinity
       // for asc — caller flips sign for desc, so -Inf stays at the end)
@@ -464,6 +466,7 @@ export function ToolsPage() {
               <SortHeader field="geo_dc" className="text-right whitespace-nowrap">Dia ({dimUnit})</SortHeader>
               <SortHeader field="geo_oal" className="text-right whitespace-nowrap">OAL ({dimUnit})</SortHeader>
               <SortHeader field="geo_nof" className="text-right">Flutes</SortHeader>
+              <SortHeader field="geo_re" className="text-right whitespace-nowrap">Corner R ({dimUnit})</SortHeader>
               <SortHeader field="qty_on_hand" className="text-right whitespace-nowrap">On hand</SortHeader>
               <SortHeader field="plex">Plex</SortHeader>
             </TableRow>
@@ -471,7 +474,7 @@ export function ToolsPage() {
           <TableBody>
             {sorted.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={9} className="h-24 text-center text-muted-foreground">
+                <TableCell colSpan={10} className="h-24 text-center text-muted-foreground">
                   {tools.length === 0 ? "No tools in database. Run a sync to populate." : "No tools match your search."}
                 </TableCell>
               </TableRow>
@@ -502,6 +505,9 @@ export function ToolsPage() {
                   </TableCell>
                   <TableCell className="text-right font-mono text-sm">
                     {tool.geo_nof ?? "\u2014"}
+                  </TableCell>
+                  <TableCell className="text-right font-mono text-sm">
+                    {fmt(tool.geo_re)}
                   </TableCell>
                   <TableCell className="text-right text-sm whitespace-nowrap">
                     {!tool.plex_supply_item_id ? (
