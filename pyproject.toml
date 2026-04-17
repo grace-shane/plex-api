@@ -23,6 +23,9 @@ datum-sync-inventory = "sync_tool_inventory:cli"
 datum-ingest-reference = "ingest_reference:main"
 datum-enrich = "enrich:main"
 datum-populate-supply-items = "populate_supply_items:cli"
+datum-plex-mock-serve    = "tools.plex_mock.server:main"
+datum-plex-mock-snapshot = "tools.plex_mock.capture_snapshots:main"
+datum-plex-mock-diff     = "tools.plex_mock.diff:main"
 
 [tool.setuptools]
 # Flat layout — all modules live at the repo root, no src/ directory.
@@ -43,5 +46,6 @@ py-modules = [
     "enrich",
     "ingest_reference",
 ]
-# Don't try to auto-discover packages — there are none.
-packages = []
+# Explicit package list — flat root modules use py-modules above;
+# sub-packages with __init__.py are listed here.
+packages = ["tools", "tools.plex_mock"]

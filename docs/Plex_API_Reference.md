@@ -23,6 +23,22 @@ All Plex APIs are routed through the developer portal. There is no session token
 - **Rate Limit**: 200 API calls per minute across all endpoints.
 - **Base URL**: `https://connect.plex.com` (Production) / `https://test.connect.plex.com` (Test)
 
+### `PLEX_BASE_URL` override
+
+`plex_api.py` honors a `PLEX_BASE_URL` environment variable that overrides
+both `BASE_URL` and `PLEX_USE_TEST`. Used by the write-validation
+workflow in [#92](https://github.com/grace-shane/Datum/issues/92) to
+point `datum-sync` at the local Plex-mimic mock
+(`tools/plex_mock/server.py`) instead of `connect.plex.com`. Unset in
+normal production operation.
+
+Resolution order (first match wins):
+
+1. Explicit `base_url=` kwarg to `PlexClient()` — tests and ad-hoc scripts
+2. `PLEX_BASE_URL` env var — deployment-time override (the mock)
+3. `PLEX_USE_TEST=1` → `test.connect.plex.com`
+4. Default → `connect.plex.com`
+
 **Required Header:**
 
 ```http

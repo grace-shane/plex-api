@@ -1,0 +1,24 @@
+{
+  "supply_items_post_shape": {
+    "required_fields": [
+      "category",
+      "description",
+      "group",
+      "inventoryUnit",
+      "supplyItemNumber",
+      "type"
+    ],
+    "forbidden_fields": [
+      "id",
+      "posted_to_plex_at"
+    ],
+    "field_types": {
+      "category": "str",
+      "description": "str",
+      "group": "str",
+      "inventoryUnit": "str",
+      "supplyItemNumber": "str",
+      "type": "str"
+    }
+  }
+}

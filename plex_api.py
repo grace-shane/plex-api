@@ -48,6 +48,12 @@ TENANT_ID  = os.environ.get("PLEX_TENANT_ID", GRACE_TENANT_ID)
 
 BASE_URL = "https://connect.plex.com"
 TEST_URL = "https://test.connect.plex.com"
+# PLEX_BASE_URL — explicit override for the Plex base URL (e.g. the local
+# mock at tools/plex_mock/server.py running on localhost:8080). Empty
+# string means "no override"; BASE_URL / TEST_URL selection applies.
+# Used by the write-validation workflow in issue #92 so the sync can
+# dress-rehearse against a fake-Plex without touching connect.plex.com.
+OVERRIDE_URL = os.environ.get("PLEX_BASE_URL", "").strip()
 USE_TEST = os.environ.get("PLEX_USE_TEST", "").strip().lower() in (
     "1", "true", "yes", "on", "enabled",
 )
@@ -59,8 +65,18 @@ TOOL_LIB_DIR = "Z:\\Engineering\\Tooling\\Fusion_Libraries"  # Mapped drive path
 # BASE CLIENT
 # ─────────────────────────────────────────────
 class PlexClient:
-    def __init__(self, api_key, api_secret="", tenant_id="", use_test=False):
-        self.base = TEST_URL if use_test else BASE_URL
+    def __init__(self, api_key, api_secret="", tenant_id="", use_test=False, base_url=None):
+        # Resolution order:
+        #   1. explicit base_url kwarg (tests, ad-hoc scripts)
+        #   2. PLEX_BASE_URL env var (deployment-time override — the mock)
+        #   3. TEST_URL if use_test else BASE_URL (original behavior)
+        explicit = (base_url or "").strip()
+        if explicit:
+            self.base = explicit
+        elif OVERRIDE_URL:
+            self.base = OVERRIDE_URL
+        else:
+            self.base = TEST_URL if use_test else BASE_URL
         self.headers = {
             "X-Plex-Connect-Api-Key": api_key,
             "Content-Type": "application/json",
