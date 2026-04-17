@@ -78,7 +78,6 @@ gh pr merge <number> --auto --squash
 
 - A test environment for the Datum Plex app — production is the
   only environment we have credentials for. Be cautious.
-- A scheduled deploy yet (Phase 5 work, issues #9-#11)
 - A CI badge or release versioning yet
 - Any tooling-API endpoints — Plex's tool data lives under
   `inventory/v1/inventory-definitions/supply-items`, NOT

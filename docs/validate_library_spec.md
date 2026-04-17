@@ -1,8 +1,8 @@
 # `validate_library.py` — Full Design Spec
 
 **Project:** Fusion 360 → Plex tooling sync — Grace Engineering
-**Repo:** https://github.com/grace-shane/plex-api
-**Status:** Spec only — implementation tracked as GitHub issue [#25](https://github.com/grace-shane/plex-api/issues/25)
+**Repo:** https://github.com/grace-shane/Datum
+**Status:** Implemented — landed in [PR #28](https://github.com/grace-shane/Datum/pull/28) (2026-04-08), closing issue [#25](https://github.com/grace-shane/Datum/issues/25). This document is retained as the design reference.
 
 ---
 
