@@ -64,6 +64,15 @@ class TestPlexClientHeaders:
 # Environment routing
 # ─────────────────────────────────────────────
 class TestPlexClientEnvironment:
+    @pytest.fixture(autouse=True)
+    def _no_base_url_override(self, monkeypatch):
+        """Ensure PLEX_BASE_URL is unset + module reloaded so OVERRIDE_URL == ''."""
+        monkeypatch.delenv("PLEX_BASE_URL", raising=False)
+        import importlib
+        importlib.reload(plex_api)
+        yield
+        importlib.reload(plex_api)
+
     def test_use_test_true_uses_test_url(self):
         c = PlexClient(api_key="k", use_test=True)
         assert c.base == TEST_URL
@@ -86,6 +95,16 @@ class TestPlexClientEnvironment:
     def test_explicit_base_url_arg_wins_even_over_use_test(self):
         c = PlexClient(api_key="k", use_test=True, base_url="http://localhost:8080")
         assert c.base == "http://localhost:8080"
+
+    def test_empty_base_url_falls_through_to_default(self, monkeypatch):
+        monkeypatch.delenv("PLEX_BASE_URL", raising=False)
+        import importlib
+        importlib.reload(plex_api)
+        c = plex_api.PlexClient(api_key="k", base_url="")
+        assert c.base == plex_api.BASE_URL
+        c = plex_api.PlexClient(api_key="k", base_url="   ")
+        assert c.base == plex_api.BASE_URL
+        importlib.reload(plex_api)
 
 
 # ─────────────────────────────────────────────

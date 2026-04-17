@@ -70,8 +70,9 @@ class PlexClient:
         #   1. explicit base_url kwarg (tests, ad-hoc scripts)
         #   2. PLEX_BASE_URL env var (deployment-time override — the mock)
         #   3. TEST_URL if use_test else BASE_URL (original behavior)
-        if base_url:
-            self.base = base_url
+        explicit = (base_url or "").strip()
+        if explicit:
+            self.base = explicit
         elif OVERRIDE_URL:
             self.base = OVERRIDE_URL
         else:
