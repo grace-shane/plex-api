@@ -27,6 +27,7 @@ TYPE_MAP = {"str": str, "int": int, "float": float, "bool": bool, "list": list, 
 @dataclass
 class DiffResult:
     issues: list[str] = field(default_factory=list)
+    checked: int = 0
 
     @property
     def ok(self) -> bool:
@@ -60,6 +61,7 @@ def diff_run(*, store: CaptureStore, run_id: str, expected: dict) -> DiffResult:
     for row in store.query(run_id=run_id, method="POST"):
         if not row["path"].endswith("/supply-items"):
             continue
+        result.checked += 1
         body = row["body"] or {}
         result.issues.extend(_check_supply_item_post(body, shape, row["id"]))
     return result
@@ -83,9 +85,12 @@ def main() -> int:
     expected = json.loads(args.expected.read_text())
     result = diff_run(store=store, run_id=args.run_id, expected=expected)
     if result.ok:
-        print(f"plex-mock diff: CLEAN (run_id={args.run_id})")
+        if result.checked == 0:
+            print(f"plex-mock diff: CLEAN but ZERO rows checked (run_id={args.run_id}) — is the run_id correct?", file=sys.stderr)
+            return 3
+        print(f"plex-mock diff: CLEAN (run_id={args.run_id}, {result.checked} supply-items POSTs checked)")
         return 0
-    print(f"plex-mock diff: DRIFT (run_id={args.run_id}, {len(result.issues)} issues)")
+    print(f"plex-mock diff: DRIFT (run_id={args.run_id}, {result.checked} checked, {len(result.issues)} issues)")
     for issue in result.issues:
         print(f"  {issue}")
     return 1

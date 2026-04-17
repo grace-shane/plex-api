@@ -81,3 +81,20 @@ class TestDiffRun:
         result = diff_run(store=store, run_id="r1", expected=expected)
         assert result.ok is False
         assert any("description" in m and "str" in m for m in result.issues)
+
+    def test_checked_counter_reflects_rows(self, store: CaptureStore, expected: dict):
+        body = {
+            "category": "Tools & Inserts", "description": "x",
+            "group": "Machining - End Mills", "inventoryUnit": "Ea",
+            "supplyItemNumber": "ABC-1", "type": "SUPPLY",
+        }
+        store.append(method="POST", path="/inventory/v1/inventory-definitions/supply-items", body=body, run_id="r1")
+        store.append(method="POST", path="/inventory/v1/inventory-definitions/supply-items", body=body, run_id="r1")
+        result = diff_run(store=store, run_id="r1", expected=expected)
+        assert result.checked == 2
+        assert result.ok is True
+
+    def test_empty_run_returns_ok_with_zero_checked(self, store: CaptureStore, expected: dict):
+        result = diff_run(store=store, run_id="nope", expected=expected)
+        assert result.ok is True
+        assert result.checked == 0
