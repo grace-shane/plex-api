@@ -453,7 +453,7 @@ export function ToolsPage() {
         )}
       </div>
 
-      <div className="overflow-x-auto rounded-md border">
+      <div className="overflow-hidden rounded-lg border">
         <Table>
           <TableHeader>
             <TableRow>
