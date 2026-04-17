@@ -111,15 +111,27 @@ Tenant IDs are not secrets — they are committed as defaults in
 ## Architecture
 
 ```
-Fusion 360 .json (network share, via Autodesk Desktop Connector)
-  └── tool_library_loader.py    reads + validates JSON, stale-file guard
-  └── validate_library.py       pre-sync validation gate (spec only, #25)
-  └── transform layer           build_supply_item_payload (in progress, #3)
-  └── plex_api.py / PlexClient  pushes to Plex REST API
-        ├── inventory/v1/inventory-definitions/supply-items   cutting tools (category="Tools & Inserts")
-        ├── mdm/v1/suppliers                                  resolve vendor UUIDs
-        └── production/v1/production-definitions/workcenters  machine setup docs (per-id write shape TBD, #6)
+Fusion 360 tool libraries
+  ├── APS cloud (primary, PR #43)  ── aps_client.py                     ─┐
+  └── ADC network share (fallback) ── tool_library_loader.py             │
+                                                                         ▼
+  validate_library.py    pre-sync validation gate (PR #28, spec: docs/validate_library_spec.md)
+         │
+         ▼
+  Supabase staging (PR #32, schema: libraries / tools / cutting_presets)
+         ├── enrich.py                 vendor catalog + geometry-based enrichment (PR #48, wired PR #54)
+         ├── React UI (PR #41)         tool browser / library browser / scripts / qty indicators — deployed to Cloudflare Workers (PR #70)
+         ▼
+  transform layer    build_supply_item_payload (in progress, #3 — sprint PRs #82 / #84)
+         │
+         ▼
+  plex_api.py / PlexClient    Plex REST API
+         ├── inventory/v1/inventory-definitions/supply-items   cutting tools (category="Tools & Inserts")
+         ├── mdm/v1/suppliers                                  resolve vendor UUIDs
+         └── production/v1/production-definitions/workcenters  machine setup docs (per-id write — blocked on Classic API, #6)
 ```
+
+The nightly sync runs via the `sync.py` CLI (PR #44), scheduled on an always-on host (PR #47). Going forward, the GCP migration ([#85](https://github.com/grace-shane/Datum/issues/85)) will drop the ADC fallback entirely, replace Supabase with Cloud SQL, and move scheduling to Cloud Scheduler — see `docs/GCP_MIGRATION.md`.
 
 ### Industry hierarchy (Plex data model)
 
@@ -329,6 +341,42 @@ Sync filter: include only `type != "holder" AND type != "probe"`
 - Stale file guard — aborts if files older than 25h (ADC sync stall detection)
 - `PermissionError` and `JSONDecodeError` handling (ADC mid-sync file locks)
 - `report_library_contents()` — diagnostic summary
+- **Status:** local-ADC path only. `aps_client.py` is the primary source today; this loader is the fallback. Scheduled for removal under the GCP migration epic (#85).
+
+### aps_client.py (PR #43)
+- OAuth client for Autodesk Platform Services (Fusion Hub online)
+- Lists hub projects and downloads tool library JSON over HTTP
+- Primary source for `sync.py`; removes the ADC install requirement on the runtime host
+
+### validate_library.py (PR #28, spec: `docs/validate_library_spec.md`)
+- Pre-sync validation gate — FAIL aborts the sync; WARNs surface in verbose/debug
+- Three entry points: CLI, programmatic (called from `tool_library_loader.load_library`), Flask `/api/fusion/validate`
+- Library-level + per-tool rule tables, cached supplier lookup for vendor validation
+- Source-agnostic engine — survives the APS migration with only a CLI default-path change
+
+### supabase_client.py + sync_supabase.py (PR #32)
+- Dedicated Supabase project (`datum`, us-east-2): `libraries` / `tools` / `cutting_presets`
+- `SUPABASE_URL` + `SUPABASE_SERVICE_ROLE_KEY` in `.env.local` — server-side only, never shipped to the browser
+- Full tool record (geometry, holders, pockets) lives here; Plex gets the identity slice via `build_supply_item_payload` (#3)
+- PR #34 dropped the `fusion2plex_` table prefix once DB isolation made it redundant
+- Scheduled for replacement by Cloud SQL under the GCP migration epic (#85)
+
+### enrich.py (PR #48, wired in the sync pipeline via PR #54)
+- Vendor reference catalog + geometry-based tool enrichment
+- Runs before staging writes so enriched records land in Supabase directly
+
+### Plex staging pipeline (sprint PRs #82 / #84, issues #79 / #80 / #81)
+- `plex_supply_items` staging table + payload computation
+- Feeds the upsert path in #3
+
+### sync.py + nightly deploy (PRs #44, #46, #47)
+- `sync.py` CLI entrypoint, APS-first with local ADC fallback
+- `--log-file` flag for persistent nightly logs (PR #46)
+- Deployed to an always-on host; scheduled nightly at midnight (PR #47)
+
+### React UI (PR #41 + successive)
+- Tool browser, library browser, Scripts page, last-sync indicator, qty columns
+- Deployed to Cloudflare Workers Static Assets (PR #70)
 
 ### bootstrap.py
 - Loads `.env.local` (gitignored) into `os.environ` via `setdefault`
@@ -356,46 +404,55 @@ Sync filter: include only `type != "holder" AND type != "probe"`
 - `pytest` suite in `tests/`. CI on PRs to `master` via
   `.github/workflows/test.yml`. Branch protection on master requires the
   `pytest` check to pass before merge. Auto-merge enabled.
-- Currently 156 tests, all green.
+- Currently 262 tests, all green (as of 2026-04-17).
 
 ---
 
 ## Immediate TODO (in priority order)
 
 All items below are mirrored as GitHub Issues — see
-https://github.com/grace-shane/datum/issues for live status.
+https://github.com/grace-shane/Datum/issues for live status.
 
-1. ~~Fix PlexClient constructor — add api_secret, include header~~ DONE
-2. ~~Find the real Plex tooling endpoint~~ DONE — it's
-   `inventory/v1/inventory-definitions/supply-items` with
-   `category="Tools & Inserts"`. 1,109 records already exist.
-3. ~~Read baseline tooling inventory from supply-items~~ DONE (PR #21,
-   issue #2 closed). `extract_supply_items(client)` in plex_api.py
-   returns the filtered list and writes a CSV snapshot. Verified
-   live: 1,109 records, 30 KB response, 1.4s round trip.
-4. **`validate_library.py` pre-sync validation gate — issue #25.**
-   Implement the full spec at `docs/validate_library_spec.md`: three
-   entry points (CLI / programmatic / Flask), library-level + per-tool
-   rule tables, cached supplier lookup for vendor validation, integration
-   hook in `tool_library_loader.load_library()` that aborts the sync on
-   FAIL. **Gates all write-side work below** — must land before #3 or
-   #7 can safely touch production.
-5. `build_supply_item_payload(fusion_tool: dict) -> dict` — issue #3.
-   Maps Fusion tool to a supply-item POST body with
+### Done (historical record — kept for context)
+
+- ~~PlexClient constructor, api_secret header~~
+- ~~Find the real Plex tooling endpoint~~ — `inventory/v1/inventory-definitions/supply-items` with `category="Tools & Inserts"`; 1,109 records
+- ~~Read baseline tooling inventory from supply-items~~ — PR #21, issue #2
+- ~~`validate_library.py` pre-sync validation gate~~ — PR #28, issue #25
+- ~~Supabase staging layer (`libraries` / `tools` / `cutting_presets`)~~ — PR #32 + #34, issue #31
+- ~~APS cloud integration — no local Fusion install required~~ — PR #43
+- ~~Nightly sync CLI entrypoint + packaging~~ — PR #44, issue #9
+- ~~Deploy nightly sync to always-on host, scheduled at midnight~~ — PR #47, issues #10 / #11
+- ~~Plex API key rotation cadence established~~ — PR #33, issue #12 (next rotation 2026-05-08)
+- ~~Vendor reference catalog + geometry-based enrichment~~ — PR #48 / #54
+- ~~React UI scaffold + Cloudflare Workers deploy~~ — PRs #41 / #68 / #70
+- ~~Plex `plex_supply_items` staging table + qty sync~~ — PRs #77 / #78 / #82 / #84
+
+### Active / next
+
+1. `build_supply_item_payload(fusion_tool: dict) -> dict` — issue #3.
+   Reads from Supabase `tools`; maps to a supply-item POST body with
    `category="Tools & Inserts"`, `group="Machining"`,
-   `supplyItemNumber=<vendor part-id>`, `description=<fusion description>`.
-   Runs validate_library gate first.
-6. Match-and-upsert logic by `supplyItemNumber` — issue #3.
-   Read existing supply-items via extract_supply_items(), match by
-   vendor part number, decide POST (new) vs PUT (update existing).
-7. Workcenter doc push — issue #6. Use the verified path
-   `production/v1/production-definitions/workcenters/{id}` and the
-   workcenterCode → Brother Speedio mapping (codes 879, 880).
-   We have READ-only verified; write endpoint shape still TBD.
-8. Core sync logic — upsert with `supplyItemNumber` dedup — issue #7.
-   Dry-run by default. Real writes require `PLEX_ALLOW_WRITES=1`.
-   Calls validate_library gate before every run.
-9. Error handling + logging to network share text file — issue #8.
+   `supplyItemNumber=<vendor part-id>`. Staging pipeline (PRs #82 / #84)
+   has landed the prerequisites.
+2. Match-and-upsert logic by `supplyItemNumber` — issue #3.
+   Decide POST (new) vs PUT (update existing) against the 1,109 current
+   supply-items. Writes require `PLEX_ALLOW_WRITES=1`.
+3. Core sync logic — upsert with `supplyItemNumber` dedup — issue #7.
+   Dry-run by default. Calls validate_library gate before every run.
+4. Error handling + logging on run failures — issue #8. `--log-file`
+   scaffold landed in PR #46; issue remains open for broader error paths.
+5. GCP migration (umbrella [#85](https://github.com/grace-shane/Datum/issues/85))
+   — see `docs/GCP_MIGRATION.md` for scope, affected code, and sequence.
+
+### Blocked on Plex Classic Web Services access
+
+6. Tool assemblies — issue #4. Classic `Part_Operation` Data Sources likely path.
+7. Routing / operation linkage — issue #5. Classic Part Operations + tool assignments.
+8. Workcenter doc push — issue #6. Classic DCS_v2. REST workcenter endpoint
+   is 11 identity fields, no document/attachment sub-resources.
+
+Access request tracked in `docs/Plex_Classic_API_Request.md`.
 
 ### Architectural decisions — #4 and #5 (updated 2026-04-10)
 
