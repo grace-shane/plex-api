@@ -2,6 +2,9 @@
 
 **Status:** Planning (2026-04-17). No code changes in the session that wrote this doc.
 **Umbrella issue:** [#85](https://github.com/grace-shane/Datum/issues/85)
+**Next-session prompts:** see [`NEXT_SESSION.md`](./NEXT_SESSION.md) for canned
+prompts covering Cloud Scheduler start/stop and the Supabase → Cloud SQL DB
+migration.
 
 This document captures the agreed architecture for moving Datum off Supabase +
 Autodesk Desktop Connector (ADC) + the locked-down work machine, and onto GCP +
