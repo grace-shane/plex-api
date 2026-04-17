@@ -20,11 +20,18 @@ This document outlines the step-by-step implementation plan for the Autodesk Fus
 
 ## Phase 3: Plex API Source-of-Truth Implementation
 
+> **Ordering rule (2026-04-17):** every real write to `connect.plex.com` in
+> this phase ships **last** and is blocked on
+> [#92](https://github.com/grace-shane/Datum/issues/92) — the Plex-mimic mock
+> HTTP server. Nothing POSTs/PUTs/PATCHes against the live tenant until the
+> mimic has run clean for a documented validation window. See `MEMORY.md` in
+> the Claude memory folder for the full rationale.
+
 - [x] **DONE (PR #21).** Implement API call to retrieve current tooling inventory — `extract_supply_items(client)` in `plex_api.py` hits `inventory/v1/inventory-definitions/supply-items` (2,516 records), filters to `category="Tools & Inserts"` (1,109 records), and writes a CSV snapshot to `outputs/`. Verified live: 30 KB response, 1.4s round trip. → [#2](https://github.com/grace-shane/datum/issues/2) *(closed)*
-- [ ] Implement API call to upsert supply-items — `build_supply_item_payload(fusion_tool)` reads from the Supabase `tools` table and writes to `inventory/v1/inventory-definitions/supply-items` with `supplyItemNumber=<vendor part-id>`. Staging table + payload computation in flight via the sprint PRs #82 / #84. → [#3](https://github.com/grace-shane/datum/issues/3)
+- [ ] Implement API call to upsert supply-items — payload compute, staging, post-sync hook, and UI have all landed (PRs #82 / #84 / #90; issues #79 / #80 / #81 closed). Remaining work is the HTTP POST itself, which ships **last** behind the Plex-mimic mock. → [#3](https://github.com/grace-shane/Datum/issues/3) **— blocked on [#92](https://github.com/grace-shane/Datum/issues/92)**
 - [ ] Implement Tool Assembly handling — **blocked on Classic Web Services access.** Plex REST supply-items are identity-only; Classic `Part_Operation` Data Sources are the likely path. See BRIEFING §"Classic Web Services" and `docs/Plex_Classic_API_Request.md`. → [#4](https://github.com/grace-shane/datum/issues/4)
 - [ ] Implement API call to link tools to Routings/Operations — **blocked on Classic Web Services access.** REST `mdm/v1/operations` has no FK to tools; `scheduling/v1/jobs` deep-dive (114,684 records) confirmed zero tool/operation FKs. → [#5](https://github.com/grace-shane/datum/issues/5)
-- [ ] Implement API call to update tooling within the specific Workcenter Document — **blocked on Classic Web Services access** (Classic DCS_v2). REST workcenter endpoint is 11 identity fields, no document/attachment sub-resources. → [#6](https://github.com/grace-shane/datum/issues/6)
+- [ ] Implement API call to update tooling within the specific Workcenter Document — GET workcenter now verified (PR #20) with a Brother Speedio `workcenterCode` → `workcenterId` map. Writes (PUT/PATCH support) are the unknown — investigation happens **against the Plex-mimic mock (#92) first, not the live tenant**, then ships last. Classic DCS_v2 remains a separate fallback path. → [#6](https://github.com/grace-shane/Datum/issues/6) **— blocked on [#92](https://github.com/grace-shane/Datum/issues/92)**
 - [x] **IT blocker resolved.** The Datum app on production with the Grace tenant authenticates correctly. The earlier "tenant routing" / "subscription approvals" investigation was a red herring caused by a credential typo. See BRIEFING.md "History of incorrect hypotheses" for the postmortem. → [#1](https://github.com/grace-shane/datum/issues/1)
 
 ## Phase 4: Data Mapping & Sync Logic
